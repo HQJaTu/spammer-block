@@ -21,202 +21,8 @@
 
 import sys
 import argparse
-from ipwhois import (
-    IPWhois,
-    Net as IPWhoisNet
-)
-from ipwhois.asn import ASNOrigin as IPWhoisASNOrigin
-from ipaddress import IPv4Address, IPv6Address, AddressValueError, IPv4Network, IPv6Network
-from collections import OrderedDict
-from netaddr import cidr_merge as netaddr_cidr_merge, IPNetwork
-import warnings
-
-
-def _ip_sort_helper(item):
-    """
-    See: https://stackoverflow.com/questions/48981416/find-ipv4-and-ignore-ipv6-ip-addresses-with-python
-    See: https://stackoverflow.com/questions/6545023/how-to-sort-ip-addresses-stored-in-dictionary-in-python
-    :param item:
-    :return:
-    """
-
-    ip = item.split('/')[0]
-    try:
-        return int(IPv4Address(ip))
-    except AddressValueError:
-        pass
-
-    try:
-        return int(IPv6Address(ip))
-    except AddressValueError:
-        pass
-
-    raise ValueError("Cannot detect '%s' as IPv4 nor IPv6 address" % item)
-
-
-def whois_query(ip):
-    # Pass 1:
-    # Get AS-number for given IP
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-
-        # Note: This is a noisy bugger for reasons nobody can comprehend.
-        obj = IPWhois(ip, allow_permutations=False)
-        ip_result = obj.lookup_rdap(asn_methods=["whois"], get_asn_description=False)
-
-    asn = int(ip_result['asn'])
-    # print("Got AS%d for CIDR %s" % (asn, ip_result['asn_cidr']))
-
-    # Pass 2:
-    # Get list of all IP-ranges for given AS-number
-    # Note: IP-address really isn't a factor here, but IPWhoisASNOrigin class requires a net.
-    #       Any net will do for ASN-queries.
-    net = IPWhoisNet(ip, allow_permutations=False)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-
-        obj = IPWhoisASNOrigin(net)
-        # methods = ['http']
-        # methods = [IPWhoisASNOrigin.ASN_SOURCE_WHOIS, IPWhoisASNOrigin.ASN_SOURCE_HTTP_IPINFO]
-        methods = [IPWhoisASNOrigin.ASN_SOURCE_HTTP_IPINFO]
-        # ASN enabled token required!
-        # obj.ipinfo_token = 'a78d9125e599a0'
-
-        asn_result = obj.lookup(asn='AS%d' % asn, asn_methods=methods)
-
-    # Pass 3:
-    # Just harvest the CIDR-numbers from previous listing and sort them by IP-address.
-    # print(asn_result)
-    nets_data = {}
-    if asn_result['nets']:
-        for net_info in asn_result['nets']:
-            net = net_info['cidr']
-            # print(net)
-            # print(net_info['description'])
-            nets_data[net] = net_info['description']
-    elif ip_result['asn_cidr']:
-        # Sometimes querying by AS-number doesn't yield any results.
-        net = ip_result['asn_cidr']
-        nets_data[net] = '-ASN-query-failed-info-from-whois: %s-' % ip_result['asn_description']
-
-    # Check for overlap
-    # 1) Create an ordered dict of all the networks received by AS-number.
-    sorted_nets = sorted(nets_data.keys(), key=_ip_sort_helper)
-    sorted_nets_data = OrderedDict(
-        [(key, {'desc': nets_data[key], 'overlap': False, 'family': None}) for key in sorted_nets])
-    # print(sorted_nets_data)
-
-    # 2) Match the IP-address families from AS-result CIDRs
-    for net_to_check in sorted_nets:
-        try:
-            IPv4Network(net_to_check)
-            sorted_nets_data[net_to_check]['family'] = 4
-            continue
-        except AddressValueError:
-            pass
-
-        try:
-            IPv6Network(net_to_check)
-            sorted_nets_data[net_to_check]['family'] = 6
-            continue
-        except AddressValueError:
-            pass
-
-    # 3) See if there is any overlap between results
-    #    Drop any small nets shadowed by bigger ones
-    for net_to_check, net_to_check_data in sorted_nets_data.items():
-        if net_to_check_data['family'] == 4:
-            net_to_check_obj = IPv4Network(net_to_check)
-        elif net_to_check_data['family'] == 6:
-            net_to_check_obj = IPv6Network(net_to_check)
-        else:
-            continue
-
-        for other_net_to_check, other_net_to_check_data in sorted_nets_data.items():
-            # Don't bother checking myself
-            if other_net_to_check == net_to_check:
-                continue
-            # Don't bother checking other address families
-            if net_to_check_data['family'] != other_net_to_check_data['family']:
-                continue
-
-            if other_net_to_check_data['family'] == 4:
-                other_net_to_check_obj = IPv4Network(other_net_to_check)
-            elif other_net_to_check_data['family'] == 6:
-                other_net_to_check_obj = IPv6Network(other_net_to_check)
-            else:
-                continue
-
-            if net_to_check_obj.overlaps(other_net_to_check_obj):
-                if net_to_check_obj.netmask < other_net_to_check_obj.netmask:
-                    sorted_nets_data[other_net_to_check]['overlap'] = net_to_check
-                else:
-                    sorted_nets_data[net_to_check]['overlap'] = other_net_to_check
-
-    # 4) See if it is possible to combine results into fewer resulting nets
-    ipv4_nets = []
-    ipv6_nets = []
-    for net_to_check, net_to_check_data in sorted_nets_data.items():
-        if net_to_check_data['family'] == 4:
-            ipv4_nets.append(IPNetwork(net_to_check))
-        elif net_to_check_data['family'] == 6:
-            ipv6_nets.append(IPNetwork(net_to_check))
-        else:
-            continue
-
-    ipv4_nets_merged = netaddr_cidr_merge(ipv4_nets)
-    ipv6_nets_merged = netaddr_cidr_merge(ipv6_nets)
-    net_data_out = OrderedDict()
-
-    # 4.1) IPv4 networks
-    for net in ipv4_nets_merged:
-        net_to_check = str(net.cidr)
-        net_to_check_obj = IPv4Network(net_to_check)
-        desc = []
-
-        for other_net_to_check, other_net_to_check_data in sorted_nets_data.items():
-            # Don't bother checking myself
-            if other_net_to_check == net_to_check:
-                continue
-            # Don't bother checking other address families
-            if 4 != other_net_to_check_data['family']:
-                continue
-            other_net_to_check_obj = IPv4Network(other_net_to_check)
-
-            if net_to_check_obj.overlaps(other_net_to_check_obj):
-                desc.append(other_net_to_check_data['desc'])
-
-        net_data_out[net_to_check] = {
-            'desc': ', '.join(desc),
-            'overlap': False,
-            'family': None
-        }
-
-    # 4.2) IPv6 networks
-    for net in ipv6_nets_merged:
-        net_to_check = str(net.cidr)
-        net_to_check_obj = IPv6Network(net_to_check)
-        desc = []
-
-        for other_net_to_check, other_net_to_check_data in sorted_nets_data.items():
-            # Don't bother checking myself
-            if other_net_to_check == net_to_check:
-                continue
-            # Don't bother checking other address families
-            if 6 != other_net_to_check_data['family']:
-                continue
-            other_net_to_check_obj = IPv6Network(other_net_to_check)
-
-            if net_to_check_obj.overlaps(other_net_to_check_obj):
-                desc.append(other_net_to_check_data['desc'])
-
-        net_data_out[net_to_check] = {
-            'desc': ', '.join(desc),
-            'overlap': False,
-            'family': None
-        }
-
-    return asn, net_data_out
+import logging
+from spammer_block_lib import *
 
 
 def output_postfix(ip, asn, nets, skip_overlap):
@@ -275,11 +81,28 @@ def main():
                         help="Don't display any overlapping subnets")
     parser.add_argument('--output', '-o', default='postfix',
                         help='Output format. Default "postfix"')
+    parser.add_argument('--log',
+                        help='Set logging level. Python default is: WARNING')
+    parser.add_argument('--ipinfo-token', default=None,
+                        help='ipinfo.io API access token if using paid ASN query service')
+    parser.add_argument('--debug-asn-result-file', default=None,
+                        help='Debugging: To conserve ASN-queries, use existing result from a cache file.')
 
     args = parser.parse_args()
     output_choices = {'postfix': output_postfix, 'json': output_json}
 
-    asn, nets_for_as = whois_query(args.ip)
+    if args.log:
+        log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+        console_handler = logging.StreamHandler(sys.stderr)
+        console_handler.setFormatter(log_formatter)
+        logging.getLogger().addHandler(console_handler)
+        print("Set logging level into: %s" % args.log)
+        asn_log = logging.getLogger('ipwhois.asn')
+        spammer_log = logging.getLogger('spammer_block_lib.spammer_block')
+        asn_log.setLevel(args.log)
+        spammer_log.setLevel(args.log)
+    spammer_blocker = SpammerBlock(token=args.ipinfo_token)
+    asn, nets_for_as = spammer_blocker.whois_query(args.ip, asn_cache_file=args.debug_asn_result_file)
     output_formatter = output_choices.get(args.output, output_none)
     output_formatter(args.ip, asn, nets_for_as, args.skip_overlapping)
 
