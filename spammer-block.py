@@ -25,53 +25,6 @@ import logging
 from spammer_block_lib import *
 
 
-def output_postfix(ip, asn, nets, skip_overlap):
-    if not nets:
-        sys.stderr.write("No nets found for IPv4 %s, ASN %s! Cannot continue." % (ip, asn))
-        exit(1)
-
-    print("# Confirmed spam from IP: %s" % ip)
-    print("# AS%d has following nets:" % asn)
-
-    format_max_net_len = 0
-    for net, net_data in nets.items():
-        length = len(net)
-        if net_data['overlap']:
-            length += 1
-        if length > format_max_net_len:
-            format_max_net_len = length
-    format_max_tabs = int(format_max_net_len / 8)
-    for net, net_data in nets.items():
-        length = len(net)
-        if net_data['overlap']:
-            if skip_overlap:
-                continue
-            length += 1
-        tabs = format_max_tabs - int(length / 8)
-        line_in_comment = ''
-        desc = ''
-        if net_data['desc']:
-            desc = "\t# %s" % net_data['desc']
-        if net_data['overlap']:
-            line_in_comment = '#'
-            if not desc:
-                desc = "\t# %s" % net_data['overlap']
-            else:
-                desc = "\t# (overlap: %s) %s" % (net_data['overlap'], net_data['desc'])
-        print("%s%s\t%s554 Go away spammer!%s" % (line_in_comment, net, '\t' * tabs, desc))
-
-
-def output_json(ip, asn, nets, skip_overlap):
-    import json
-
-    nets_out = {'confirmed_ip': ip, 'asn': asn, 'nets': nets}
-    print(json.dumps(nets_out, indent=4))
-
-
-def output_none(ip, asn, nets, skip_overlap):
-    pass
-
-
 def main():
     parser = argparse.ArgumentParser(description='Block IP-ranges of a spammer')
     parser.add_argument('--ip', '-i', required=True,
@@ -89,7 +42,6 @@ def main():
                         help='Debugging: To conserve ASN-queries, use existing result from a cache file.')
 
     args = parser.parse_args()
-    output_choices = {'postfix': output_postfix, 'json': output_json}
 
     if args.log:
         log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
@@ -101,10 +53,16 @@ def main():
         spammer_log = logging.getLogger('spammer_block_lib.spammer_block')
         asn_log.setLevel(args.log)
         spammer_log.setLevel(args.log)
+
+    # Go process
     spammer_blocker = SpammerBlock(token=args.ipinfo_token)
     asn, nets_for_as = spammer_blocker.whois_query(args.ip, asn_cache_file=args.debug_asn_result_file)
-    output_formatter = output_choices.get(args.output, output_none)
-    output_formatter(args.ip, asn, nets_for_as, args.skip_overlapping)
+
+    # Go output
+    output_formatter_class = OUTPUT_OPTIONS.get(args.output, SpammerReporterNone)
+    output_formatter = output_formatter_class()
+    output = output_formatter.report(args.ip, asn, nets_for_as, args.skip_overlapping)
+    print(output)
 
 
 if __name__ == "__main__":
