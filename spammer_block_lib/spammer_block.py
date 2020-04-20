@@ -30,7 +30,6 @@ from ipwhois import (
 )
 from ipwhois.asn import ASNOrigin as IPWhoisASNOrigin
 from ipaddress import IPv4Address, IPv6Address, AddressValueError, IPv4Network, IPv6Network
-from collections import OrderedDict
 from netaddr import cidr_merge as netaddr_cidr_merge, IPNetwork
 import logging
 import pickle
@@ -40,7 +39,6 @@ log = logging.getLogger(__name__)
 
 
 class SpammerBlock:
-
     ipinfo_token = None
 
     def __init__(self, token=None):
@@ -77,12 +75,28 @@ class SpammerBlock:
                     pickle.dump(asn_result, asn_result_file)
 
         # Query 3:
-        # Just harvest the CIDR-numbers from previous listing and sort them by IP-address.
+        # Just harvest the CIDR-numbers from previous listing.
         nets_data = {}
         if asn_result['nets']:
             for net_info in asn_result['nets']:
                 net = net_info['cidr']
-                nets_data[net] = net_info['description']
+
+                address_family = None
+                try:
+                    IPv4Network(net)
+                    address_family = 4
+                except AddressValueError:
+                    try:
+                        IPv6Network(net)
+                        address_family = 6
+                    except AddressValueError:
+                        pass
+
+                nets_data[net] = {
+                    'desc': net_info['description'],
+                    'overlap': False,
+                    'family': address_family
+                }
         elif ip_result['asn_cidr']:
             # Sometimes querying by AS-number doesn't yield any results.
             net = ip_result['asn_cidr']
@@ -90,64 +104,14 @@ class SpammerBlock:
 
         # Post-process
 
-        # Check for overlap
-        # 1) Create an ordered dict of all the networks received by AS-number.
+        # 1) Keep the list of CIDRs in a sorted list.
+        #    Sorted networkwise, not alphabetically.
         sorted_nets = sorted(nets_data.keys(), key=SpammerBlock._ip_sort_helper)
-        sorted_nets_data = OrderedDict(
-            [(key, {'desc': nets_data[key], 'overlap': False, 'family': None}) for key in sorted_nets])
-        # print(sorted_nets_data)
 
-        # 2) Match the IP-address families from AS-result CIDRs
-        for net_to_check in sorted_nets:
-            try:
-                IPv4Network(net_to_check)
-                sorted_nets_data[net_to_check]['family'] = 4
-                continue
-            except AddressValueError:
-                pass
-
-            try:
-                IPv6Network(net_to_check)
-                sorted_nets_data[net_to_check]['family'] = 6
-                continue
-            except AddressValueError:
-                pass
-
-        # 3) See if there is any overlap between results
-        #    Drop any small nets shadowed by bigger ones
-        for net_to_check, net_to_check_data in sorted_nets_data.items():
-            if net_to_check_data['family'] == 4:
-                net_to_check_obj = IPv4Network(net_to_check)
-            elif net_to_check_data['family'] == 6:
-                net_to_check_obj = IPv6Network(net_to_check)
-            else:
-                continue
-
-            for other_net_to_check, other_net_to_check_data in sorted_nets_data.items():
-                # Don't bother checking myself
-                if other_net_to_check == net_to_check:
-                    continue
-                # Don't bother checking other address families
-                if net_to_check_data['family'] != other_net_to_check_data['family']:
-                    continue
-
-                if other_net_to_check_data['family'] == 4:
-                    other_net_to_check_obj = IPv4Network(other_net_to_check)
-                elif other_net_to_check_data['family'] == 6:
-                    other_net_to_check_obj = IPv6Network(other_net_to_check)
-                else:
-                    continue
-
-                if net_to_check_obj.overlaps(other_net_to_check_obj):
-                    if net_to_check_obj.netmask < other_net_to_check_obj.netmask:
-                        sorted_nets_data[other_net_to_check]['overlap'] = net_to_check
-                    else:
-                        sorted_nets_data[net_to_check]['overlap'] = other_net_to_check
-
-        # 4) See if it is possible to combine results into fewer resulting nets
+        # 2) See if it is possible to combine results into fewer resulting nets
         ipv4_nets = []
         ipv6_nets = []
-        for net_to_check, net_to_check_data in sorted_nets_data.items():
+        for net_to_check, net_to_check_data in nets_data.items():
             if net_to_check_data['family'] == 4:
                 ipv4_nets.append(IPNetwork(net_to_check))
             elif net_to_check_data['family'] == 6:
@@ -157,55 +121,73 @@ class SpammerBlock:
 
         ipv4_nets_merged = netaddr_cidr_merge(ipv4_nets)
         ipv6_nets_merged = netaddr_cidr_merge(ipv6_nets)
-        net_data_out = OrderedDict()
 
-        # 4.1) IPv4 networks
-        for net in ipv4_nets_merged:
-            net_to_check = str(net.cidr)
+        ipv4_nets_merged = [str(net.cidr) for net in ipv4_nets_merged]
+        ipv6_nets_merged = [str(net.cidr) for net in ipv6_nets_merged]
+
+        ipv4_new_nets = [net for net in ipv4_nets_merged if net not in set(sorted_nets)]
+        ipv6_new_nets = [net for net in ipv6_nets_merged if net not in set(sorted_nets)]
+
+        net_data_out = {}
+
+        # Prepare the output data
+        # 3.1) IPv4 networks
+        for net_to_check in ipv4_nets_merged:
+            # Don't do those merged networks we've already done
+            if net_to_check in net_data_out:
+                continue
+
             net_to_check_obj = IPv4Network(net_to_check)
-            desc = []
+            if net_to_check in ipv4_new_nets:
+                # This is a "new" network formed by merging existing results.
+                net_data_out[net_to_check] = {
+                    'desc': '',
+                    'overlap': False,
+                    'family': 4
+                }
 
-            for other_net_to_check, other_net_to_check_data in sorted_nets_data.items():
-                # Don't bother checking myself
-                if other_net_to_check == net_to_check:
-                    continue
-                # Don't bother checking other address families
-                if 4 != other_net_to_check_data['family']:
-                    continue
-                other_net_to_check_obj = IPv4Network(other_net_to_check)
+                # Add the "old" networks the newly merged network shadows.
+                for other_net_to_check in ipv4_nets:
+                    net = str(other_net_to_check.cidr)
+                    other_net_to_check_obj = IPv4Network(net)
+                    if net_to_check_obj.overlaps(other_net_to_check_obj):
+                        net_data_out[net] = nets_data[net]
+                        net_data_out[net]['overlap'] = net_to_check
 
-                if net_to_check_obj.overlaps(other_net_to_check_obj):
-                    desc.append(other_net_to_check_data['desc'])
+                # New network done, go for next one
+                continue
 
-            net_data_out[net_to_check] = {
-                'desc': ', '.join(desc),
-                'overlap': False,
-                'family': None
-            }
+            # Not a new net, not a merged net
+            net_data_out[net_to_check] = nets_data[net_to_check]
 
-        # 4.2) IPv6 networks
-        for net in ipv6_nets_merged:
-            net_to_check = str(net.cidr)
+        # 3.2) IPv6 networks
+        for net_to_check in ipv6_nets_merged:
+            # Don't do those merged networks we've already done
+            if net_to_check in net_data_out:
+                continue
+
             net_to_check_obj = IPv6Network(net_to_check)
-            desc = []
+            if net_to_check in ipv6_new_nets:
+                # This is a "new" network formed by merging existing results.
+                net_data_out[net_to_check] = {
+                    'desc': '',
+                    'overlap': False,
+                    'family': 6
+                }
 
-            for other_net_to_check, other_net_to_check_data in sorted_nets_data.items():
-                # Don't bother checking myself
-                if other_net_to_check == net_to_check:
-                    continue
-                # Don't bother checking other address families
-                if 6 != other_net_to_check_data['family']:
-                    continue
-                other_net_to_check_obj = IPv6Network(other_net_to_check)
+                # Add the "old" networks the newly merged network shadows.
+                for other_net_to_check in ipv6_nets:
+                    net = str(other_net_to_check.cidr)
+                    other_net_to_check_obj = IPv6Network(net)
+                    if net_to_check_obj.overlaps(other_net_to_check_obj):
+                        net_data_out[net] = nets_data[net]
+                        net_data_out[net]['overlap'] = net_to_check
 
-                if net_to_check_obj.overlaps(other_net_to_check_obj):
-                    desc.append(other_net_to_check_data['desc'])
+                # New network done, go for next one
+                continue
 
-            net_data_out[net_to_check] = {
-                'desc': ', '.join(desc),
-                'overlap': False,
-                'family': None
-            }
+            # Not a new net, not a merged net
+            net_data_out[net_to_check] = nets_data[net_to_check]
 
         return asn, net_data_out
 
