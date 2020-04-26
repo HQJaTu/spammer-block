@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='spammer-block',
-    version='0.4',
+    version='0.4.2',
     url='',
     license='GPLv2',
     author='Jari Turkia',

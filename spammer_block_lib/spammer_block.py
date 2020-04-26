@@ -20,7 +20,7 @@ __author__ = 'Jari Turkia'
 __email__ = 'jatu@hqcodeshop.fi'
 __url__ = 'https://blog.hqcodeshop.fi/'
 __git__ = 'https://github.com/HQJaTu/'
-__version__ = '0.4.1'
+__version__ = '0.4.2'
 __license__ = 'GPLv2'
 __banner__ = 'cert_check_lib v%s (%s)' % (__version__, __git__)
 
@@ -58,12 +58,15 @@ class SpammerBlock:
         # Note: IP-address really isn't a factor here, but IPWhoisASNOrigin class requires a net.
         #       Any net will do for ASN-queries.
         net = IPWhoisNet(ip, allow_permutations=False)
-        asn_query = IPWhoisASNOrigin(net, token=self.ipinfo_token)
-        # Original: https://github.com/secynic/ipwhois
-        # methods = ['http']
-        # JaTu: https://github.com/HQJaTu/ipwhois/tree/ipinfo.io
-        # methods = [IPWhoisASNOrigin.ASN_SOURCE_WHOIS, IPWhoisASNOrigin.ASN_SOURCE_HTTP_IPINFO]
-        methods = [IPWhoisASNOrigin.ASN_SOURCE_HTTP_IPINFO]
+        if hasattr(IPWhoisASNOrigin, 'ASN_SOURCE_HTTP_IPINFO'):
+            # JaTu: https://github.com/HQJaTu/ipwhois/tree/ipinfo.io
+            asn_query = IPWhoisASNOrigin(net, token=self.ipinfo_token)
+            # methods = [IPWhoisASNOrigin.ASN_SOURCE_WHOIS, IPWhoisASNOrigin.ASN_SOURCE_HTTP_IPINFO]
+            methods = [IPWhoisASNOrigin.ASN_SOURCE_HTTP_IPINFO]
+        else:
+            # Original: https://github.com/secynic/ipwhois
+            asn_query = IPWhoisASNOrigin(net)
+            methods = ['http']
 
         if asn_cache_file and os.path.exists(asn_cache_file):
             with open(asn_cache_file, "rb") as asn_result_file:
@@ -78,6 +81,7 @@ class SpammerBlock:
         # Just harvest the CIDR-numbers from previous listing.
         nets_data = {}
         if asn_result['nets']:
+            log.debug("Got nets for AS%d" % asn)
             for net_info in asn_result['nets']:
                 net = net_info['cidr']
 
@@ -85,12 +89,14 @@ class SpammerBlock:
                 try:
                     IPv4Network(net)
                     address_family = 4
+                    log.debug("Net %s is IPv4" % net)
                 except AddressValueError:
                     try:
                         IPv6Network(net)
                         address_family = 6
+                        log.debug("Net %s is IPv6" % net)
                     except AddressValueError:
-                        pass
+                        log.debug("Net %s is neither IPv4 nor IPv6" % net)
 
                 nets_data[net] = {
                     'desc': net_info['description'],
@@ -99,8 +105,13 @@ class SpammerBlock:
                 }
         elif ip_result['asn_cidr']:
             # Sometimes querying by AS-number doesn't yield any results.
+            log.debug("No nets for AS%d" % asn)
             net = ip_result['asn_cidr']
-            nets_data[net] = '-ASN-query-failed-info-from-whois: %s-' % ip_result['asn_description']
+            nets_data[net] = {
+                'desc': '-ASN-query-failed-info-from-whois: %s-' % ip_result['asn_description'],
+                'overlap': False,
+                'family': None
+            }
 
         # Post-process
 
