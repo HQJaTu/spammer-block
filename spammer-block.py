@@ -32,14 +32,20 @@ def main():
     parser.add_argument('--skip-overlapping', action="store_true",
                         default=False,
                         help="Don't display any overlapping subnets")
-    parser.add_argument('--output', '-o', default='postfix',
+    parser.add_argument('--output-format', '-o', default='postfix',
                         help='Output format. Default "postfix"')
+    parser.add_argument('--output-file',
+                        help='Output to a file.')
     parser.add_argument('--log',
                         help='Set logging level. Python default is: WARNING')
     parser.add_argument('--ipinfo-token', default=None,
                         help='ipinfo.io API access token if using paid ASN query service')
-    parser.add_argument('--debug-asn-result-file', default=None,
-                        help='Debugging: To conserve ASN-queries, use existing result from a cache file.')
+    #parser.add_argument('--debug-write-asn-result-to-file',
+    #                    help='Debugging: To conserve ASN-queries, write result to a cache file.')
+    parser.add_argument('--asn-result-cache-file',
+                        help='Debugging: To conserve ASN-queries, use existing result from a Python cached file.')
+    parser.add_argument('--short-circuit-asn-result-json-file',
+                        help='Debugging: To conserve ASN-queries, use existing result from JSON file.')
 
     args = parser.parse_args()
 
@@ -53,16 +59,29 @@ def main():
         spammer_log = logging.getLogger('spammer_block_lib.spammer_block')
         asn_log.setLevel(args.log)
         spammer_log.setLevel(args.log)
+    else:
+        asn_log = None
 
     # Go process
     spammer_blocker = SpammerBlock(token=args.ipinfo_token)
-    asn, nets_for_as = spammer_blocker.whois_query(args.ip, asn_cache_file=args.debug_asn_result_file)
+    asn, nets_for_as = spammer_blocker.whois_query(args.ip,
+                                                   asn_cache_file=args.asn_result_cache_file,
+                                                   asn_json_result_file=args.short_circuit_asn_result_json_file)
 
     # Go output
-    output_formatter_class = OUTPUT_OPTIONS.get(args.output, SpammerReporterNone)
+    output_formatter_class = OUTPUT_OPTIONS.get(args.output_format, SpammerReporterNone)
     output_formatter = output_formatter_class()
     output = output_formatter.report(args.ip, asn, nets_for_as, args.skip_overlapping)
-    print(output)
+
+    if args.output_file:
+        if asn_log:
+            asn_log.debug("Writing output to a file %s:" % args.output_file)
+        with open(args.output_file, 'w') as output_file:
+            output_file.write(output)
+    else:
+        if asn_log:
+            asn_log.debug("Printing the output:")
+        print(output)
 
 
 if __name__ == "__main__":

@@ -34,6 +34,7 @@ from netaddr import cidr_merge as netaddr_cidr_merge, IPNetwork
 import logging
 import pickle
 import os
+import json
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class SpammerBlock:
     def __init__(self, token=None):
         self.ipinfo_token = token
 
-    def whois_query(self, ip, asn_cache_file=None):
+    def whois_query(self, ip, asn_cache_file=None, asn_json_result_file=None):
         # Query 1:
         # Get AS-number for given IP
         ip_whois_query = IPWhois(ip, allow_permutations=False)
@@ -59,18 +60,50 @@ class SpammerBlock:
         #       Any net will do for ASN-queries.
         net = IPWhoisNet(ip, allow_permutations=False)
         if hasattr(IPWhoisASNOrigin, 'ASN_SOURCE_HTTP_IPINFO'):
+            if not self.ipinfo_token:
+                log.error("Attempt to use ipinfo.io API without token")
             # JaTu: https://github.com/HQJaTu/ipwhois/tree/ipinfo.io
             asn_query = IPWhoisASNOrigin(net, token=self.ipinfo_token)
             # methods = [IPWhoisASNOrigin.ASN_SOURCE_WHOIS, IPWhoisASNOrigin.ASN_SOURCE_HTTP_IPINFO]
             methods = [IPWhoisASNOrigin.ASN_SOURCE_HTTP_IPINFO]
         else:
+            if self.ipinfo_token:
+                log.warning("Using RADb for ASN-query. Ignoring ipinfo.io API token.")
             # Original: https://github.com/secynic/ipwhois
             asn_query = IPWhoisASNOrigin(net)
             methods = ['http']
 
+        if asn_cache_file:
+            if not os.path.exists(asn_cache_file):
+                log.warning("ASN cache file %s doesn't exist! Ignoring." % asn_cache_file)
+        if asn_json_result_file:
+            if not os.path.exists(asn_json_result_file):
+                log.warning("ASN JSON result file %s doesn't exist! Ignoring." % asn_json_result_file)
         if asn_cache_file and os.path.exists(asn_cache_file):
             with open(asn_cache_file, "rb") as asn_result_file:
                 asn_result = pickle.load(asn_result_file)
+        elif asn_json_result_file and os.path.exists(asn_json_result_file):
+            with open(asn_json_result_file) as json_file:
+                asn_data = json.load(json_file)
+
+            # Sanity
+            if 'asn' not in asn_data:
+                raise Exception("Invalid JSON-data read. Not valid ASN information!")
+            if asn_data['asn'] != 'AS%d' % asn:
+                raise Exception("Invalid JSON-data read. This is for %s, expected AS%d!" % (asn_data['asn'], asn))
+            if 'prefixes' not in asn_data:
+                raise Exception("Invalid JSON-data read. Not valid ASN information!")
+            asn_result = {
+                'nets': []
+            }
+            for net_info in asn_data['prefixes']:
+                prefix = net_info["netblock"]
+                net_name = net_info["name"]
+                net_info_out = {
+                    'cidr': prefix,
+                    'description': net_name
+                }
+                asn_result['nets'].append(net_info_out)
         else:
             asn_result = asn_query.lookup(asn='AS%d' % asn, asn_methods=methods)
             if asn_cache_file:
