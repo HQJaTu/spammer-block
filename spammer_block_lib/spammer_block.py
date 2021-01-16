@@ -20,13 +20,14 @@ __author__ = 'Jari Turkia'
 __email__ = 'jatu@hqcodeshop.fi'
 __url__ = 'https://blog.hqcodeshop.fi/'
 __git__ = 'https://github.com/HQJaTu/'
-__version__ = '0.4.2'
+__version__ = '0.4.3'
 __license__ = 'GPLv2'
 __banner__ = 'cert_check_lib v%s (%s)' % (__version__, __git__)
 
 from ipwhois import (
     IPWhois,
-    Net as IPWhoisNet
+    Net as IPWhoisNet,
+    exceptions as IPWhoisExceptions
 )
 from ipwhois.asn import ASNOrigin as IPWhoisASNOrigin
 from ipaddress import IPv4Address, IPv6Address, AddressValueError, IPv4Network, IPv6Network
@@ -35,6 +36,7 @@ import logging
 import pickle
 import os
 import json
+import html
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +50,8 @@ class SpammerBlock:
     def whois_query(self, ip, asn_cache_file=None, asn_json_result_file=None):
         # Query 1:
         # Get AS-number for given IP
-        ip_whois_query = IPWhois(ip, allow_permutations=False)
+        #ip_whois_query = IPWhois(ip, allow_permutations=False)
+        ip_whois_query = IPWhois(ip)
         ip_result = ip_whois_query.lookup_rdap(asn_methods=["whois"], get_asn_description=False)
 
         asn = int(ip_result['asn'])
@@ -58,27 +61,36 @@ class SpammerBlock:
         # Get list of all IP-ranges for given AS-number
         # Note: IP-address really isn't a factor here, but IPWhoisASNOrigin class requires a net.
         #       Any net will do for ASN-queries.
-        net = IPWhoisNet(ip, allow_permutations=False)
+        #net = IPWhoisNet(ip, allow_permutations=False)
+        net = IPWhoisNet(ip)
         if hasattr(IPWhoisASNOrigin, 'ASN_SOURCE_HTTP_IPINFO'):
+            log.debug("Query HTTP from IPinfo.io")
             if not self.ipinfo_token:
                 log.error("Attempt to use ipinfo.io API without token")
             # JaTu: https://github.com/HQJaTu/ipwhois/tree/ipinfo.io
             asn_query = IPWhoisASNOrigin(net, token=self.ipinfo_token)
             # methods = [IPWhoisASNOrigin.ASN_SOURCE_WHOIS, IPWhoisASNOrigin.ASN_SOURCE_HTTP_IPINFO]
             methods = [IPWhoisASNOrigin.ASN_SOURCE_HTTP_IPINFO]
+            can_fallback_radb = True
         else:
+            log.debug("Query HTTP from RADb")
             if self.ipinfo_token:
                 log.warning("Using RADb for ASN-query. Ignoring ipinfo.io API token.")
             # Original: https://github.com/secynic/ipwhois
             asn_query = IPWhoisASNOrigin(net)
             methods = ['http']
+            can_fallback_radb = False
 
         if asn_cache_file:
             if not os.path.exists(asn_cache_file):
                 log.warning("ASN cache file %s doesn't exist! Ignoring." % asn_cache_file)
+            else:
+                log.debug("Using cached file")
         if asn_json_result_file:
             if not os.path.exists(asn_json_result_file):
                 log.warning("ASN JSON result file %s doesn't exist! Ignoring." % asn_json_result_file)
+            else:
+                log.debug("Using existing result file")
         if asn_cache_file and os.path.exists(asn_cache_file):
             with open(asn_cache_file, "rb") as asn_result_file:
                 asn_result = pickle.load(asn_result_file)
@@ -105,7 +117,14 @@ class SpammerBlock:
                 }
                 asn_result['nets'].append(net_info_out)
         else:
-            asn_result = asn_query.lookup(asn='AS%d' % asn, asn_methods=methods)
+            try:
+                asn_result = asn_query.lookup(asn='AS%d' % asn, asn_methods=methods)
+            except IPWhoisExceptions.ASNOriginLookupError as e:
+                if not can_fallback_radb:
+                    raise e
+                asn_query = IPWhoisASNOrigin(net)
+                methods = ['http']
+                asn_result = asn_query.lookup(asn='AS%d' % asn, asn_methods=methods)
             if asn_cache_file:
                 with open(asn_cache_file, "wb") as asn_result_file:
                     pickle.dump(asn_result, asn_result_file)
@@ -131,8 +150,15 @@ class SpammerBlock:
                     except AddressValueError:
                         log.debug("Net %s is neither IPv4 nor IPv6" % net)
 
+                if net_info['description'] and True:
+                    # All methods will use HTML
+                    # If a description exist, make sure HTML-entities are unescaped.
+                    desc = html.unescape(net_info['description'])
+                else:
+                    desc = net_info['description']
+
                 nets_data[net] = {
-                    'desc': net_info['description'],
+                    'desc': desc,
                     'overlap': False,
                     'family': address_family
                 }
@@ -222,8 +248,20 @@ class SpammerBlock:
                 # Add the "old" networks the newly merged network shadows.
                 for other_net_to_check in ipv6_nets:
                     net = str(other_net_to_check.cidr)
+                    if net == net_to_check:
+                        # No sense of matching same nets
+                        continue
                     other_net_to_check_obj = IPv6Network(net)
                     if net_to_check_obj.overlaps(other_net_to_check_obj):
+                        if not net in nets_data:
+                            log.warning("Internal: When checking merged net %s, matching it with %s not found!" % (net_to_check, net))
+                            #import pprint
+                            #pp = pprint.PrettyPrinter(indent=4)
+                            #pp.pprint(net)
+                            #pp.pprint(other_net_to_check)
+                            #pp.pprint(nets_data)
+                            #raise Exception("Internal: %s not found!" % net)
+                            continue
                         net_data_out[net] = nets_data[net]
                         net_data_out[net]['overlap'] = net_to_check
 

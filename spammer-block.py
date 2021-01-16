@@ -30,8 +30,8 @@ def main():
     parser.add_argument('--ip', '-i', required=True,
                         help='IPv4 address to query for')
     parser.add_argument('--skip-overlapping', action="store_true",
-                        default=False,
-                        help="Don't display any overlapping subnets")
+                        default=True,
+                        help="Don't display any overlapping subnets. Default: yes")
     parser.add_argument('--output-format', '-o', default='postfix',
                         help='Output format. Default "postfix"')
     parser.add_argument('--output-file',
