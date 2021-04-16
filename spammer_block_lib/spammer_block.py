@@ -20,10 +20,11 @@ __author__ = 'Jari Turkia'
 __email__ = 'jatu@hqcodeshop.fi'
 __url__ = 'https://blog.hqcodeshop.fi/'
 __git__ = 'https://github.com/HQJaTu/'
-__version__ = '0.4.3'
+__version__ = '0.5'
 __license__ = 'GPLv2'
 __banner__ = 'cert_check_lib v%s (%s)' % (__version__, __git__)
 
+from typing import Tuple, List, Dict
 from ipwhois import (
     IPWhois,
     Net as IPWhoisNet,
@@ -47,21 +48,41 @@ class SpammerBlock:
     def __init__(self, token=None):
         self.ipinfo_token = token
 
-    def whois_query(self, ip, asn_cache_file=None, asn_json_result_file=None):
+    def whois_query(self, ip, asn=None, asn_cache_file=None, asn_json_result_file=None):
+        if not asn:
+            asn, ip_result = self._asn_query(ip)
+        else:
+            ip_result = None
+            if asn[:2] == "AS":
+                asn = int(asn[2:])
+            else:
+                asn = int(asn)
+            if not asn:
+                raise ValueError("Need valid ASN!")
+
+        nets_data = self._ranges_for_asn(ip, asn, ip_result, asn_cache_file, asn_json_result_file)
+        net_data_out = self._post_process_asn_result(nets_data)
+
+        return asn, net_data_out
+
+    def _asn_query(self, ip) -> Tuple[int, dict]:
         # Query 1:
         # Get AS-number for given IP
-        #ip_whois_query = IPWhois(ip, allow_permutations=False)
+        # ip_whois_query = IPWhois(ip, allow_permutations=False)
         ip_whois_query = IPWhois(ip)
         ip_result = ip_whois_query.lookup_rdap(asn_methods=["whois"], get_asn_description=False)
 
         asn = int(ip_result['asn'])
         log.debug("Got AS%d for CIDR %s" % (asn, ip_result['asn_cidr']))
 
+        return asn, ip_result
+
+    def _ranges_for_asn(self, ip, asn, ip_result, asn_cache_file=None, asn_json_result_file=None) -> Dict:
         # Query 2:
         # Get list of all IP-ranges for given AS-number
         # Note: IP-address really isn't a factor here, but IPWhoisASNOrigin class requires a net.
         #       Any net will do for ASN-queries.
-        #net = IPWhoisNet(ip, allow_permutations=False)
+        # net = IPWhoisNet(ip, allow_permutations=False)
         net = IPWhoisNet(ip)
         if hasattr(IPWhoisASNOrigin, 'ASN_SOURCE_HTTP_IPINFO'):
             log.debug("Query HTTP from IPinfo.io")
@@ -162,15 +183,20 @@ class SpammerBlock:
                     'overlap': False,
                     'family': address_family
                 }
-        elif ip_result['asn_cidr']:
+        elif ip_result and 'asn_cidr' in ip_result and ip_result['asn_cidr']:
             # Sometimes querying by AS-number doesn't yield any results.
             log.debug("No nets for AS%d" % asn)
             net = ip_result['asn_cidr']
             nets_data[net] = {
-                'desc': '-ASN-query-failed-info-from-whois: %s-' % ip_result['asn_description'],
+                'desc': 'AS%d-query-failed-info-from-whois: %s-' % (asn, ip_result['asn_description']),
                 'overlap': False,
                 'family': None
             }
+
+        return nets_data
+
+    @staticmethod
+    def _post_process_asn_result(nets_data) -> Dict:
 
         # Post-process
 
@@ -254,13 +280,14 @@ class SpammerBlock:
                     other_net_to_check_obj = IPv6Network(net)
                     if net_to_check_obj.overlaps(other_net_to_check_obj):
                         if not net in nets_data:
-                            log.warning("Internal: When checking merged net %s, matching it with %s not found!" % (net_to_check, net))
-                            #import pprint
-                            #pp = pprint.PrettyPrinter(indent=4)
-                            #pp.pprint(net)
-                            #pp.pprint(other_net_to_check)
-                            #pp.pprint(nets_data)
-                            #raise Exception("Internal: %s not found!" % net)
+                            log.warning("Internal: When checking merged net %s, matching it with %s not found!" % (
+                            net_to_check, net))
+                            # import pprint
+                            # pp = pprint.PrettyPrinter(indent=4)
+                            # pp.pprint(net)
+                            # pp.pprint(other_net_to_check)
+                            # pp.pprint(nets_data)
+                            # raise Exception("Internal: %s not found!" % net)
                             continue
                         net_data_out[net] = nets_data[net]
                         net_data_out[net]['overlap'] = net_to_check
@@ -271,10 +298,10 @@ class SpammerBlock:
             # Not a new net, not a merged net
             net_data_out[net_to_check] = nets_data[net_to_check]
 
-        return asn, net_data_out
+        return net_data_out
 
     @staticmethod
-    def _ip_sort_helper(item):
+    def _ip_sort_helper(item) -> int:
         """
         See: https://stackoverflow.com/questions/48981416/find-ipv4-and-ignore-ipv6-ip-addresses-with-python
         See: https://stackoverflow.com/questions/6545023/how-to-sort-ip-addresses-stored-in-dictionary-in-python

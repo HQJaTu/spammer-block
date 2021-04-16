@@ -27,8 +27,10 @@ from spammer_block_lib import *
 
 def main():
     parser = argparse.ArgumentParser(description='Block IP-ranges of a spammer')
-    parser.add_argument('--ip', '-i', required=True,
+    parser.add_argument('ip', metavar="IP",
                         help='IPv4 address to query for')
+    parser.add_argument('--asn', '-a',
+                        help='Skip querying for ASN')
     parser.add_argument('--skip-overlapping', action="store_true",
                         default=True,
                         help="Don't display any overlapping subnets. Default: yes")
@@ -65,6 +67,7 @@ def main():
     # Go process
     spammer_blocker = SpammerBlock(token=args.ipinfo_token)
     asn, nets_for_as = spammer_blocker.whois_query(args.ip,
+                                                   asn=args.asn,
                                                    asn_cache_file=args.asn_result_cache_file,
                                                    asn_json_result_file=args.short_circuit_asn_result_json_file)
 

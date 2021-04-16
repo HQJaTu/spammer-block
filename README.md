@@ -28,25 +28,37 @@ Limit: A non-paid API of ipinfo.ip will serve 5 ASN-queries / day / IP-address.
 
 ## Usage
 ```text
-usage: spammer-block.py [-h] --ip IP [--skip-overlapping] [--output OUTPUT]
-                        [--log LOG] [--ipinfo-token IPINFO_TOKEN]
-                        [--debug-asn-result-file DEBUG_ASN_RESULT_FILE]
+usage: spammer-block.py [-h] [--asn ASN] [--skip-overlapping]
+                        [--output-format OUTPUT_FORMAT]
+                        [--output-file OUTPUT_FILE] [--log LOG]
+                        [--ipinfo-token IPINFO_TOKEN]
+                        [--asn-result-cache-file ASN_RESULT_CACHE_FILE]
+                        [--short-circuit-asn-result-json-file SHORT_CIRCUIT_ASN_RESULT_JSON_FILE]
+                        IP
 
 Block IP-ranges of a spammer
 
+positional arguments:
+  IP                    IPv4 address to query for
+
 optional arguments:
   -h, --help            show this help message and exit
-  --ip IP, -i IP        IPv4 address to query for
-  --skip-overlapping    Don't display any overlapping subnets
-  --output OUTPUT, -o OUTPUT
+  --asn ASN, -a ASN     Skip querying for ASN
+  --skip-overlapping    Don't display any overlapping subnets. Default: yes
+  --output-format OUTPUT_FORMAT, -o OUTPUT_FORMAT
                         Output format. Default "postfix"
+  --output-file OUTPUT_FILE
+                        Output to a file.
   --log LOG             Set logging level. Python default is: WARNING
   --ipinfo-token IPINFO_TOKEN
                         ipinfo.io API access token if using paid ASN query
                         service
-  --debug-asn-result-file DEBUG_ASN_RESULT_FILE
+  --asn-result-cache-file ASN_RESULT_CACHE_FILE
                         Debugging: To conserve ASN-queries, use existing
-                        result from a cache file.
+                        result from a Python cached file.
+  --short-circuit-asn-result-json-file SHORT_CIRCUIT_ASN_RESULT_JSON_FILE
+                        Debugging: To conserve ASN-queries, use existing
+                        result from JSON file.
 ```
 
 ## Postfix configuration
@@ -65,7 +77,7 @@ File `/etc/postfix/client_checks.cidr` will contain listings of all known spamme
 ## Example:
 Default output is in Postfix-configuration format.
 ```text
-$ ./spammer-block.py -i 185.162.126.236
+$ ./spammer-block.py 185.162.126.236
 # Confirmed spam from IP: 185.162.126.236
 # AS56378 has following nets:
 31.133.100.0/24         554 Go away spammer!    # O.M.C. COMPUTERS & COMMUNICATIONS LTD (CLOUDWEBMANAGE-IL-JR)
