@@ -48,9 +48,9 @@ def main():
                         help='Debugging: To conserve ASN-queries, use existing result from a Python cached file.')
     parser.add_argument('--short-circuit-asn-result-json-file',
                         help='Debugging: To conserve ASN-queries, use existing result from JSON file.')
-
     args = parser.parse_args()
 
+    # IP-stuff
     if args.log:
         log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
         console_handler = logging.StreamHandler(sys.stderr)

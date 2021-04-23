@@ -88,3 +88,6 @@ $ ./spammer-block.py 185.162.126.236
 185.162.126.0/24        554 Go away spammer!    # O.M.C. COMPUTERS & COMMUNICATIONS LTD (IL-OMC-20160808)
 ```
 
+# Spammer reporter
+
+Utility `spammer-reporter.py` docs TBD.
