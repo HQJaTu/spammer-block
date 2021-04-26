@@ -90,4 +90,42 @@ $ ./spammer-block.py 185.162.126.236
 
 # Spammer reporter
 
-Utility `spammer-reporter.py` docs TBD.
+Utility `spammer-reporter.py` is used to report received email to organization
+fighting against spam. An example of one would be [SpamCop](https://www.spamcop.net/).
+
+## Usage
+```text
+usage: spammer-reporter.py [-h] [--spamcop-report-address REPORT-ADDRESS]
+                           [--spamcop-report-from-stdin]
+                           [--spamcop-report-from-file FILENAME]
+
+Report received email as spam
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --spamcop-report-address REPORT-ADDRESS
+                        Report to Spamcop using given address
+  --spamcop-report-from-stdin
+                        Read email from STDIN and report it as spam into
+                        Spamcop
+  --spamcop-report-from-file FILENAME
+                        Read email from a RFC2822 file and report it as spam
+                        into Spamcop
+```
+
+## Example 1: Manual reporting from Maildir
+Any identified email from Maildir can be reported by running following command:
+```bash
+spammer-reporter.py --spamcop-report-address submit.-your-id-here-@spam.spamcop.net --spamcop_report_from_stdin
+```
+
+## Example 2: Procmail-based forwarding
+Automated reporting of known spam with obsoleted [Procmail](https://wiki2.dovecot.org/procmail).
+
+Have `.procmailrc` contain match rule and action:
+```text
+| /usr/local/bin/spammer-reporter.py --spamcop-report-address submit.-your-id-here-@spam.spamcop.net --spamcop-report-from-stdin
+```
+
+Note: Assuming `pip install` would place command `spammer-reporter.py` into directory `/usr/local/bin/`.
+Check your environment for exact details.

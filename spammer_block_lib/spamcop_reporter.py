@@ -2,6 +2,7 @@
 
 # vim: autoindent tabstop=4 shiftwidth=4 expandtab softtabstop=4 filetype=python
 
+import os
 import sys
 import smtplib
 from os.path import basename
@@ -52,15 +53,18 @@ class SpamcopReporter:
         smtp.close()
 
     def report_files(self, files):
+        assert isinstance(files, list)
         msg = self._create_message()
-        for f in files:
-            with open(f, "rb") as fil:
+        for file in files:
+            if not os.path.exists(file):
+                raise ValueError("File %s does not exist!" % file)
+            with open(file, "rb") as fil:
                 part = MIMEApplication(
                     fil.read(),
-                    Name=basename(f)
+                    Name=basename(file)
                 )
             # After the file is closed
-            part['Content-Disposition'] = 'attachment; filename="%s"' % basename(f)
+            part['Content-Disposition'] = 'attachment; filename="%s"' % basename(file)
             msg.attach(part)
 
         smtp = smtplib.SMTP(self.mail_server)
