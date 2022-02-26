@@ -18,7 +18,7 @@
 #
 # Copyright (c) Jari Turkia
 
-
+import os
 import sys
 import argparse
 import logging
@@ -33,7 +33,10 @@ def _setup_logger():
     console_handler.setFormatter(log_formatter)
     console_handler.propagate = False
     log.addHandler(console_handler)
-    log.setLevel(logging.WARNING)
+    log.setLevel(logging.INFO)
+
+    lib_log = logging.getLogger('spammer_block_lib')
+    lib_log.setLevel(logging.INFO)
 
 
 def main():
@@ -48,26 +51,34 @@ def main():
     _setup_logger()
 
     # Spamcop-stuff
-    if args.spamcop_report_from_stdin or args.spamcop_report_from_file:
-        if not args.spamcop_report_address:
-            raise ValueError("Need --spamcop-report-address !")
-        log.info("SpamCop reporting")
-        reporter = SpamcopReporter(send_from="joe.user@example.com", send_to=args.spamcop_report_address)
+    if not args.spamcop_report_from_stdin and not args.spamcop_report_from_file:
+        log.warning("No arguments given. Printing help.")
+        parser.print_help()
+        exit(1)
+
+    if not args.spamcop_report_address:
+        raise ValueError("Need --spamcop-report-address !")
+
+    reporter = SpamcopReporter(send_from="joe.user@example.com", send_to=args.spamcop_report_address)
+    if args.spamcop_report_from_stdin:
+        log.info("Reporting from STDIN pipe")
         try:
-            if args.spamcop_report_from_stdin:
-                log.info("Reporting from STDIN pipe")
-                reporter.report_stdin()
-            elif args.spamcop_report_from_file:
-                log.info("Reporting file: %s" % args.spamcop_report_from_file)
-                reporter.report_files([args.spamcop_report_from_file])
+            reporter.report_stdin()
         except Exception as exc:
             log.error("Reporting failed! Exception: %s" % exc)
-        log.info("Done SpamCop reporting")
-        exit(0)
-
-    log.warning("No arguments given. Printing help.")
-    parser.print_help()
-    exit(1)
+    elif args.spamcop_report_from_file:
+        log.info("Reporting file: %s" % args.spamcop_report_from_file)
+        if not os.path.exists(args.spamcop_report_from_file):
+            log.error("File %s doesn't exist!" % args.spamcop_report_from_file)
+            exit(1)
+        try:
+            reporter.report_files([args.spamcop_report_from_file])
+        except Exception as exc:
+            log.error("Reporting failed! Exception: %s" % exc)
+    else:
+        raise NotImplementedError("What? Internal logic failure.")
+    log.info("Done SpamCop reporting")
+    exit(0)
 
 
 if __name__ == "__main__":

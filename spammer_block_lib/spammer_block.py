@@ -22,9 +22,9 @@ __url__ = 'https://blog.hqcodeshop.fi/'
 __git__ = 'https://github.com/HQJaTu/'
 __version__ = '0.5'
 __license__ = 'GPLv2'
-__banner__ = 'cert_check_lib v%s (%s)' % (__version__, __git__)
+__banner__ = 'cert_check_lib v{} ({})'.format(__version__, __git__)
 
-from typing import Tuple, List, Dict
+from typing import Tuple
 from ipwhois import (
     IPWhois,
     Net as IPWhoisNet,
@@ -34,7 +34,6 @@ from ipwhois.asn import ASNOrigin as IPWhoisASNOrigin
 from ipaddress import IPv4Address, IPv6Address, AddressValueError, IPv4Network, IPv6Network
 from netaddr import cidr_merge as netaddr_cidr_merge, IPNetwork
 import logging
-import pickle
 import os
 import json
 import html
@@ -45,11 +44,22 @@ log = logging.getLogger(__name__)
 class SpammerBlock:
     ipinfo_token = None
 
-    def __init__(self, token=None):
+    def __init__(self, token: str = None):
         self.ipinfo_token = token
 
-    def whois_query(self, ip, asn=None, asn_cache_file=None, asn_json_result_file=None):
+    def whois_query(self, ip, asn: str = None,
+                    asn_json_result_file: str = None) -> Tuple[int, dict]:
+        """
+        Query networks contained in an AS-number.
+        During post-processing make the networks as big as possible without overlap.
+        :param ip: (optional, not needed if ASN given) IP-address to query for (IPv4 only? is IPv6 allowed?)
+        :param asn: (optional, not needed if ASN given) AS-number to query for
+        :param asn_json_result_file: If file exists, short-circuit and read previous query result from this file.
+                                     If file not exist, query and write result to this file as JSON for next use.
+        :return: dict of networks
+        """
         if not asn:
+            # Convert input IP into AS-number
             asn, ip_result = self._asn_query(ip)
         else:
             ip_result = None
@@ -60,12 +70,14 @@ class SpammerBlock:
             if not asn:
                 raise ValueError("Need valid ASN!")
 
-        nets_data = self._ranges_for_asn(ip, asn, ip_result, asn_cache_file, asn_json_result_file)
+        asn_result = self._ranges_for_asn(ip, asn, asn_json_result_file)
+        nets_data = self._process_asn_list(asn, asn_result)
         net_data_out = self._post_process_asn_result(nets_data)
 
         return asn, net_data_out
 
-    def _asn_query(self, ip) -> Tuple[int, dict]:
+    @staticmethod
+    def _asn_query(ip) -> Tuple[int, dict]:
         # Query 1:
         # Get AS-number for given IP
         # ip_whois_query = IPWhois(ip, allow_permutations=False)
@@ -73,13 +85,54 @@ class SpammerBlock:
         ip_result = ip_whois_query.lookup_rdap(asn_methods=["whois"], get_asn_description=False)
 
         asn = int(ip_result['asn'])
-        log.debug("Got AS%d for CIDR %s" % (asn, ip_result['asn_cidr']))
+        log.debug("Got AS{} for CIDR {}".format(asn, ip_result['asn_cidr']))
 
         return asn, ip_result
 
-    def _ranges_for_asn(self, ip, asn, ip_result, asn_cache_file=None, asn_json_result_file=None) -> Dict:
+    def _ranges_for_asn(self, ip, asn, asn_json_result_file: str) -> dict:
+        """
+
+        :param ip:
+        :param asn: AS-number to query
+        :param asn_json_result_file: If exists, don't query, use previously saved cache data
+        :param short_circuit_asn_result: Don't query, use this JSON data from external source
+        :return:
+        """
+
         # Query 2:
         # Get list of all IP-ranges for given AS-number
+
+        if asn_json_result_file:
+            # From cache?
+            if not os.path.exists(asn_json_result_file):
+                log.warning("ASN JSON result file {} doesn't exist! Ignoring.".format(asn_json_result_file))
+            else:
+                log.debug("Using existing result file")
+                with open(asn_json_result_file) as json_file:
+                    asn_data = json.load(json_file)
+
+                # Sanity
+                if 'asn' not in asn_data:
+                    raise Exception("Invalid JSON-data read. Not valid ASN information!")
+                if asn_data['asn'] != 'AS{}'.format(asn):
+                    raise Exception(
+                        "Invalid JSON-data read. This is for {}, expected AS{}!".format(asn_data['asn'], asn))
+                if 'prefixes' not in asn_data:
+                    raise Exception("Invalid JSON-data read. Not valid ASN information!")
+                asn_result = {
+                    'nets': []
+                }
+                for net_info in asn_data['prefixes']:
+                    prefix = net_info["netblock"]
+                    net_name = net_info["name"]
+                    net_info_out = {
+                        'cidr': prefix,
+                        'description': net_name
+                    }
+                    asn_result['nets'].append(net_info_out)
+
+                return asn_result
+
         # Note: IP-address really isn't a factor here, but IPWhoisASNOrigin class requires a net.
         #       Any net will do for ASN-queries.
         # net = IPWhoisNet(ip, allow_permutations=False)
@@ -102,59 +155,35 @@ class SpammerBlock:
             methods = ['http']
             can_fallback_radb = False
 
+        # Go query
+        if False:
+            from .ipinfo_io import IPInfoIO
+            log.debug("Using ipinfo.io widget query")
+            asn_query = IPInfoIO()
+
+        try:
+            asn_result = asn_query.lookup(asn='AS{}'.format(asn), asn_methods=methods)
+        except IPWhoisExceptions.ASNOriginLookupError as e:
+            if not can_fallback_radb:
+                raise e
+            asn_query = IPWhoisASNOrigin(net)
+            methods = ['http']
+            asn_result = asn_query.lookup(asn='AS{}'.format(asn), asn_methods=methods)
         if asn_cache_file:
-            if not os.path.exists(asn_cache_file):
-                log.warning("ASN cache file %s doesn't exist! Ignoring." % asn_cache_file)
-            else:
-                log.debug("Using cached file")
-        if asn_json_result_file:
-            if not os.path.exists(asn_json_result_file):
-                log.warning("ASN JSON result file %s doesn't exist! Ignoring." % asn_json_result_file)
-            else:
-                log.debug("Using existing result file")
-        if asn_cache_file and os.path.exists(asn_cache_file):
-            with open(asn_cache_file, "rb") as asn_result_file:
-                asn_result = pickle.load(asn_result_file)
-        elif asn_json_result_file and os.path.exists(asn_json_result_file):
-            with open(asn_json_result_file) as json_file:
-                asn_data = json.load(json_file)
+            with open(asn_cache_file, "wb") as asn_result_file:
+                pickle.dump(asn_result, asn_result_file)
 
-            # Sanity
-            if 'asn' not in asn_data:
-                raise Exception("Invalid JSON-data read. Not valid ASN information!")
-            if asn_data['asn'] != 'AS%d' % asn:
-                raise Exception("Invalid JSON-data read. This is for %s, expected AS%d!" % (asn_data['asn'], asn))
-            if 'prefixes' not in asn_data:
-                raise Exception("Invalid JSON-data read. Not valid ASN information!")
-            asn_result = {
-                'nets': []
-            }
-            for net_info in asn_data['prefixes']:
-                prefix = net_info["netblock"]
-                net_name = net_info["name"]
-                net_info_out = {
-                    'cidr': prefix,
-                    'description': net_name
-                }
-                asn_result['nets'].append(net_info_out)
-        else:
-            try:
-                asn_result = asn_query.lookup(asn='AS%d' % asn, asn_methods=methods)
-            except IPWhoisExceptions.ASNOriginLookupError as e:
-                if not can_fallback_radb:
-                    raise e
-                asn_query = IPWhoisASNOrigin(net)
-                methods = ['http']
-                asn_result = asn_query.lookup(asn='AS%d' % asn, asn_methods=methods)
-            if asn_cache_file:
-                with open(asn_cache_file, "wb") as asn_result_file:
-                    pickle.dump(asn_result, asn_result_file)
+        return asn_result
 
+    @staticmethod
+    def _process_asn_list(asn: int, asn_result: dict, ip_result_fallback: dict) -> dict:
         # Query 3:
         # Just harvest the CIDR-numbers from previous listing.
         nets_data = {}
         if asn_result['nets']:
-            log.debug("Got nets for AS%d" % asn)
+            # Plan A:
+            # Have network list in the result
+            log.debug("Got nets for AS{0:d}".format(asn))
             for net_info in asn_result['nets']:
                 net = net_info['cidr']
 
@@ -162,14 +191,15 @@ class SpammerBlock:
                 try:
                     IPv4Network(net)
                     address_family = 4
-                    log.debug("Net %s is IPv4" % net)
+                    log.debug("Net {} is IPv4".format(net))
                 except AddressValueError:
                     try:
                         IPv6Network(net)
                         address_family = 6
-                        log.debug("Net %s is IPv6" % net)
+                        log.debug("Net {} is IPv6".format(net))
                     except AddressValueError:
-                        log.debug("Net %s is neither IPv4 nor IPv6" % net)
+                        log.error("Net {} is neither IPv4 nor IPv6".format(net))
+                        raise
 
                 if net_info['description'] and True:
                     # All methods will use HTML
@@ -183,12 +213,14 @@ class SpammerBlock:
                     'overlap': False,
                     'family': address_family
                 }
-        elif ip_result and 'asn_cidr' in ip_result and ip_result['asn_cidr']:
+        elif ip_result_fallback and 'asn_cidr' in ip_result_fallback and ip_result_fallback['asn_cidr']:
+            # Plan B:
             # Sometimes querying by AS-number doesn't yield any results.
-            log.debug("No nets for AS%d" % asn)
-            net = ip_result['asn_cidr']
+            # Also, sometimes the IP-result has the nets in it.
+            log.debug("No nets for AS{}".format(asn))
+            net = ip_result_fallback['asn_cidr']
             nets_data[net] = {
-                'desc': 'AS%d-query-failed-info-from-whois: %s-' % (asn, ip_result['asn_description']),
+                'desc': 'AS{}-query-failed-info-from-whois: {}-'.format(asn, ip_result_fallback['asn_description']),
                 'overlap': False,
                 'family': None
             }
@@ -196,7 +228,7 @@ class SpammerBlock:
         return nets_data
 
     @staticmethod
-    def _post_process_asn_result(nets_data) -> Dict:
+    def _post_process_asn_result(nets_data) -> dict:
 
         # Post-process
 
@@ -279,9 +311,10 @@ class SpammerBlock:
                         continue
                     other_net_to_check_obj = IPv6Network(net)
                     if net_to_check_obj.overlaps(other_net_to_check_obj):
-                        if not net in nets_data:
-                            log.warning("Internal: When checking merged net %s, matching it with %s not found!" % (
-                            net_to_check, net))
+                        if net not in nets_data:
+                            log.warning("Internal: When checking merged net {}, "
+                                        "matching it with {} not found!".format(net_to_check, net)
+                                        )
                             # import pprint
                             # pp = pprint.PrettyPrinter(indent=4)
                             # pp.pprint(net)
@@ -320,4 +353,4 @@ class SpammerBlock:
         except AddressValueError:
             pass
 
-        raise ValueError("Cannot detect '%s' as IPv4 nor IPv6 address" % item)
+        raise ValueError("Cannot detect '{}' as IPv4 nor IPv6 address".format(item))

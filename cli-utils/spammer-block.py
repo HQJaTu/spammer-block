@@ -24,6 +24,26 @@ import argparse
 import logging
 from spammer_block_lib import *
 
+log = logging.getLogger(__name__)
+
+
+def _setup_logger(log_level_in: str) -> None:
+    log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+    console_handler = logging.StreamHandler(sys.stderr)
+    console_handler.setFormatter(log_formatter)
+    console_handler.propagate = False
+    log.addHandler(console_handler)
+
+    if log_level_in not in logging._nameToLevel:
+        raise ValueError("Unkown logging level '{}'!".format(log_level_in))
+    log_level = logging._nameToLevel[log_level_in]
+    log.setLevel(log_level)
+
+    whois_log = logging.getLogger('ipwhois.asn')
+    spammer_log = logging.getLogger('spammer_block_lib')
+    whois_log.setLevel(log_level)
+    spammer_log.setLevel(log_level)
+
 
 def main():
     parser = argparse.ArgumentParser(description='Block IP-ranges of a spammer')
@@ -38,38 +58,21 @@ def main():
                         help='Output format. Default "postfix"')
     parser.add_argument('--output-file',
                         help='Output to a file.')
-    parser.add_argument('--log',
+    parser.add_argument('--log-level', default="WARNING",
                         help='Set logging level. Python default is: WARNING')
     parser.add_argument('--ipinfo-token', default=None,
                         help='ipinfo.io API access token if using paid ASN query service')
-    #parser.add_argument('--debug-write-asn-result-to-file',
-    #                    help='Debugging: To conserve ASN-queries, write result to a cache file.')
-    parser.add_argument('--asn-result-cache-file',
-                        help='Debugging: To conserve ASN-queries, use existing result from a Python cached file.')
-    parser.add_argument('--short-circuit-asn-result-json-file',
-                        help='Debugging: To conserve ASN-queries, use existing result from JSON file.')
+    parser.add_argument('--asn-result-json-file',
+                        help='To conserve ASN-queries, save query result or use existing result from a previous query.')
     args = parser.parse_args()
 
-    # IP-stuff
-    if args.log:
-        log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
-        console_handler = logging.StreamHandler(sys.stderr)
-        console_handler.setFormatter(log_formatter)
-        logging.getLogger().addHandler(console_handler)
-        print("Set logging level into: %s" % args.log)
-        asn_log = logging.getLogger('ipwhois.asn')
-        spammer_log = logging.getLogger('spammer_block_lib.spammer_block')
-        asn_log.setLevel(args.log)
-        spammer_log.setLevel(args.log)
-    else:
-        asn_log = None
+    _setup_logger(args.log_level)
 
     # Go process
     spammer_blocker = SpammerBlock(token=args.ipinfo_token)
     asn, nets_for_as = spammer_blocker.whois_query(args.ip,
                                                    asn=args.asn,
-                                                   asn_cache_file=args.asn_result_cache_file,
-                                                   asn_json_result_file=args.short_circuit_asn_result_json_file)
+                                                   asn_json_result_file=args.asn_result_json_file)
 
     # Go output
     output_formatter_class = OUTPUT_OPTIONS.get(args.output_format, SpammerReporterNone)
@@ -77,13 +80,11 @@ def main():
     output = output_formatter.report(args.ip, asn, nets_for_as, args.skip_overlapping)
 
     if args.output_file:
-        if asn_log:
-            asn_log.debug("Writing output to a file %s:" % args.output_file)
+        log.debug("Writing output to a file %s:" % args.output_file)
         with open(args.output_file, 'w') as output_file:
             output_file.write(output)
     else:
-        if asn_log:
-            asn_log.debug("Printing the output:")
+        log.debug("Printing the output:")
         print(output)
 
 

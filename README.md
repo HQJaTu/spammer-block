@@ -13,7 +13,7 @@ Thus, we get a complete map of the network neighbourhood via single address.
 1. Git clone
 1. Install:
 ```bash
-pip3 install .
+pip install .
 ```
 
 ### ipwhois-library
@@ -114,9 +114,11 @@ optional arguments:
 ```
 
 ## Example 1: Manual reporting from Maildir
-Any identified email from Maildir can be reported by running following command:
+Any identified email from a Maildir stored file can be reported by running following command:
 ```bash
-spammer-reporter.py --spamcop-report-address submit.-your-id-here-@spam.spamcop.net --spamcop_report_from_stdin
+$ spammer-reporter.py \
+  --spamcop-report-address submit.-your-id-here-@spam.spamcop.net \
+  --spamcop-report-from-file Mail/cur/-the-mail-file-here-
 ```
 
 ## Example 2: Procmail-based forwarding

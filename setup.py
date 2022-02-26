@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='spammer-block',
-    version='0.5.1',
+    version='0.6',
     url='',
     license='GPLv2',
     author='Jari Turkia',
@@ -23,8 +23,8 @@ setup(
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9'
     ],
-    python_requires='>=3.7, <4',
-    install_requires=['ipwhois', 'netaddr'],
+    python_requires='>=3.8, <4',
+    install_requires=['ipwhois', 'netaddr', 'requests'],
     scripts=['cli-utils/spammer-block.py', 'cli-utils/spammer-reporter.py'],
     packages=find_packages()
 )
