@@ -1,6 +1,6 @@
 # vim: autoindent tabstop=4 shiftwidth=4 expandtab softtabstop=4 filetype=python
 
-# This file is part of Spamer Block tool.
+# This file is part of Spammer Block library and tool.
 # Spamer Block is free software: you can
 # redistribute it and/or modify it under the terms of the GNU General Public
 # License as published by the Free Software Foundation, version 2.
@@ -16,41 +16,10 @@
 #
 # Copyright (c) Jari Turkia
 
-from abc import ABC, abstractmethod
+from .abstract import NetworkOutputAbstract
 
 
-class SpammerReporterAbstract(ABC):
-
-    def report(self, ip: str, asn: int, nets: dict, skip_overlap: bool):
-        if not nets:
-            raise ValueError("No nets found for IPv4 {}, AS{}! Cannot continue.".format(ip, asn))
-
-        return self._do_report(ip, asn, nets, skip_overlap)
-
-    @abstractmethod
-    def _do_report(self, ip: str, asn: int, nets: dict, skip_overlap: bool):
-        raise NotImplemented("This is an abstract class!")
-
-
-class SpammerReporterNone(SpammerReporterAbstract):
-
-    def _do_report(self, ip: str, asn: int, nets: dict, skip_overlap: bool):
-        # This method intentionally left blank.
-        pass
-
-
-class SpammerReporterJson(SpammerReporterAbstract):
-
-    def _do_report(self, ip: str, asn: int, nets: dict, skip_overlap: bool):
-        import json
-
-        nets_out = {'confirmed_ip': ip, 'asn': asn, 'nets': nets}
-        json = json.dumps(nets_out, indent=4)
-
-        return json
-
-
-class SpammerReporterPostfix(SpammerReporterAbstract):
+class NetworkOutputPostfix(NetworkOutputAbstract):
     DEFAULT_POSTFIX_RULE = "554 Go away spammer!"
 
     def __init__(self, rule: str = DEFAULT_POSTFIX_RULE):

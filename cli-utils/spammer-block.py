@@ -2,7 +2,7 @@
 
 # vim: autoindent tabstop=4 shiftwidth=4 expandtab softtabstop=4 filetype=python
 
-# This file is part of Spamer Block tool.
+# This file is part of Spammer Block library and tool.
 # Spamer Block is free software: you can
 # redistribute it and/or modify it under the terms of the GNU General Public
 # License as published by the Free Software Foundation, version 2.
@@ -64,11 +64,11 @@ def main():
                              'Default: "postfix" will produce Postfix CIDR-table')
     parser.add_argument('--output-file',
                         help='Output to a file.')
-    parser.add_argument('--postfix-rule', default=SpammerReporterPostfix.DEFAULT_POSTFIX_RULE,
+    parser.add_argument('--postfix-rule', default=NetworkOutputPostfix.DEFAULT_POSTFIX_RULE,
                         help='CIDR-table rule to apply for a net.\n'
                              'Dynamic AS-number assignment with "{{ASN}}".\n'
                              'Default: "{}"'.format(
-                            SpammerReporterPostfix.DEFAULT_POSTFIX_RULE)
+                            NetworkOutputPostfix.DEFAULT_POSTFIX_RULE)
                         )
     parser.add_argument('--log-level', default="WARNING",
                         help='Set logging level. Python default is: WARNING')
@@ -93,9 +93,9 @@ def main():
                                                    asn_json_result_file=args.asn_result_json_file)
 
     # Go output
-    output_formatter_class = NET_LIST_OUTPUT_OPTIONS.get(args.output_format, SpammerReporterNone)
+    output_formatter_class = NET_LIST_OUTPUT_OPTIONS.get(args.output_format, NetworkOutputNone)
     output_formatter = output_formatter_class()
-    if isinstance(output_formatter, SpammerReporterPostfix) and args.postfix_rule:
+    if isinstance(output_formatter, NetworkOutputPostfix) and args.postfix_rule:
         output_formatter.rule = args.postfix_rule
     output = output_formatter.report(args.ip, asn, nets_for_as, args.skip_overlapping)
 
