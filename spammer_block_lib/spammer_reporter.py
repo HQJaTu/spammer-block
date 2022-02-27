@@ -16,28 +16,32 @@
 #
 # Copyright (c) Jari Turkia
 
+from abc import ABC, abstractmethod
 
-class SpammerReporterAbstract:
 
-    def report(self, ip, asn, nets, skip_overlap):
+class SpammerReporterAbstract(ABC):
+
+    def report(self, ip: str, asn: int, nets: dict, skip_overlap: bool):
         if not nets:
-            raise ValueError("No nets found for IPv4 %s, ASN %s! Cannot continue." % (ip, asn))
+            raise ValueError("No nets found for IPv4 {}, AS{}! Cannot continue.".format(ip, asn))
 
         return self._do_report(ip, asn, nets, skip_overlap)
 
-    def _do_report(self, ip, asn, nets, skip_overlap):
+    @abstractmethod
+    def _do_report(self, ip: str, asn: int, nets: dict, skip_overlap: bool):
         raise NotImplemented("This is an abstract class!")
 
 
 class SpammerReporterNone(SpammerReporterAbstract):
 
-    def _do_report(self, ip, asn, nets, skip_overlap):
+    def _do_report(self, ip: str, asn: int, nets: dict, skip_overlap: bool):
+        # This method intentionally left blank.
         pass
 
 
 class SpammerReporterJson(SpammerReporterAbstract):
 
-    def _do_report(self, ip, asn, nets, skip_overlap):
+    def _do_report(self, ip: str, asn: int, nets: dict, skip_overlap: bool):
         import json
 
         nets_out = {'confirmed_ip': ip, 'asn': asn, 'nets': nets}
@@ -47,11 +51,27 @@ class SpammerReporterJson(SpammerReporterAbstract):
 
 
 class SpammerReporterPostfix(SpammerReporterAbstract):
+    DEFAULT_POSTFIX_RULE = "554 Go away spammer!"
 
-    def _do_report(self, ip, asn, nets, skip_overlap):
-        report = "# Confirmed spam from IP: %s\n" % ip
-        report += "# AS%d has following nets:\n" % asn
+    def __init__(self, rule: str = DEFAULT_POSTFIX_RULE):
+        self.rule = rule
 
+    def _do_report(self, ip: str, asn: int, nets: dict, skip_overlap: bool):
+        """
+        Produce CIDR-table
+        Docs: https://www.postfix.org/cidr_table.5.html
+        :param ip: IP-address where spam originated
+        :param asn: AS-number to stamp into report
+        :param nets: List of networks belonging to AS-number
+        :param skip_overlap: Create shorter list and skip any overlapping networks
+        :return:
+        """
+        report = "# Confirmed spam from IP: {}\n".format(ip)
+        report += "# AS{} has following nets:\n".format(asn)
+
+        rule = self.rule
+        if '{ASN}' in self.rule:
+            rule = self.rule.format(ASN=asn)
         format_max_net_len = 0
         for net, net_data in nets.items():
             length = len(net)
@@ -70,20 +90,16 @@ class SpammerReporterPostfix(SpammerReporterAbstract):
             line_in_comment = ''
             desc = ''
             if net_data['desc']:
-                desc = "\t# %s" % net_data['desc']
+                desc = "\t# {}".format(net_data['desc'])
             if net_data['overlap']:
                 line_in_comment = '#'
                 if not desc:
-                    desc = "\t# %s" % net_data['overlap']
+                    desc = "\t# {}".format(net_data['overlap'])
                 else:
-                    desc = "\t# (overlap: %s) %s" % (net_data['overlap'], net_data['desc'])
-            report += "%s%s\t%s554 Go away spammer!%s\n" % (line_in_comment, net, '\t' * tabs, desc)
+                    desc = "\t# (overlap: {}) {}".format(net_data['overlap'], net_data['desc'])
+            report += "{0:s}{1:s}\t{2:s}{3:s}{4:s}\n".format(
+                line_in_comment, net, '\t' * tabs,
+                rule, desc
+            )
 
         return report
-
-
-OUTPUT_OPTIONS = {
-    'none': SpammerReporterNone,
-    'json': SpammerReporterJson,
-    'postfix': SpammerReporterPostfix
-}

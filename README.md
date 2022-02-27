@@ -30,10 +30,10 @@ Limit: A non-paid API of ipinfo.ip will serve 5 ASN-queries / day / IP-address.
 ```text
 usage: spammer-block.py [-h] [--asn ASN] [--skip-overlapping]
                         [--output-format OUTPUT_FORMAT]
-                        [--output-file OUTPUT_FILE] [--log LOG]
+                        [--output-file OUTPUT_FILE]
+                        [--postfix-rule POSTFIX_RULE] [--log-level LOG_LEVEL]
                         [--ipinfo-token IPINFO_TOKEN]
-                        [--asn-result-cache-file ASN_RESULT_CACHE_FILE]
-                        [--short-circuit-asn-result-json-file SHORT_CIRCUIT_ASN_RESULT_JSON_FILE]
+                        [--asn-result-json-file ASN_RESULT_JSON_FILE]
                         IP
 
 Block IP-ranges of a spammer
@@ -46,19 +46,21 @@ optional arguments:
   --asn ASN, -a ASN     Skip querying for ASN
   --skip-overlapping    Don't display any overlapping subnets. Default: yes
   --output-format OUTPUT_FORMAT, -o OUTPUT_FORMAT
-                        Output format. Default "postfix"
+                        Output format. Choices: none, json, postfix
+                        Default: "postfix" will produce Postfix CIDR-table
   --output-file OUTPUT_FILE
                         Output to a file.
-  --log LOG             Set logging level. Python default is: WARNING
+  --postfix-rule POSTFIX_RULE
+                        CIDR-table rule to apply for a net.
+                        Dynamic AS-number assignment with "{ASN}".
+                        Default: "554 Go away spammer!"
+  --log-level LOG_LEVEL
+                        Set logging level. Python default is: WARNING
   --ipinfo-token IPINFO_TOKEN
-                        ipinfo.io API access token if using paid ASN query
-                        service
-  --asn-result-cache-file ASN_RESULT_CACHE_FILE
-                        Debugging: To conserve ASN-queries, use existing
-                        result from a Python cached file.
-  --short-circuit-asn-result-json-file SHORT_CIRCUIT_ASN_RESULT_JSON_FILE
-                        Debugging: To conserve ASN-queries, use existing
-                        result from JSON file.
+                        ipinfo.io API access token if using paid ASN query service
+  --asn-result-json-file ASN_RESULT_JSON_FILE
+                        To conserve ASN-queries, save query result
+                        or use existing result from a previous query.
 ```
 
 ## Postfix configuration

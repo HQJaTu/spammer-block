@@ -24,7 +24,7 @@ __version__ = '0.5'
 __license__ = 'GPLv2'
 __banner__ = 'cert_check_lib v{} ({})'.format(__version__, __git__)
 
-from typing import Tuple
+from typing import Tuple, Union
 from ipwhois import (
     IPWhois,
     Net as IPWhoisNet,
@@ -38,17 +38,19 @@ import os
 import json
 import html
 
+from .datasources.datasource_base import DatasourceBase
+
 log = logging.getLogger(__name__)
 
 
 class SpammerBlock:
     ipinfo_token = None
 
-    def __init__(self, token: str = None):
-        self.ipinfo_token = token
+    def __init__(self, datasource: DatasourceBase):
+        self._datasource = datasource
 
     def whois_query(self, ip, asn: str = None,
-                    asn_json_result_file: str = None) -> Tuple[int, dict]:
+                    asn_json_result_file: str = None) -> Tuple[int, Union[None, dict]]:
         """
         Query networks contained in an AS-number.
         During post-processing make the networks as big as possible without overlap.
@@ -70,8 +72,11 @@ class SpammerBlock:
             if not asn:
                 raise ValueError("Need valid ASN!")
 
-        asn_result = self._ranges_for_asn(ip, asn, asn_json_result_file)
-        nets_data = self._process_asn_list(asn, asn_result)
+        asn_result = self._ranges_for_asn(asn, asn_json_result_file)
+        if not asn_result:
+            return asn, None
+
+        nets_data = self._process_asn_list(asn, asn_result, ip_result)
         net_data_out = self._post_process_asn_result(nets_data)
 
         return asn, net_data_out
@@ -89,7 +94,7 @@ class SpammerBlock:
 
         return asn, ip_result
 
-    def _ranges_for_asn(self, ip, asn, asn_json_result_file: str) -> dict:
+    def _ranges_for_asn(self, asn: int, asn_json_result_file: str) -> dict:
         """
 
         :param ip:
@@ -107,7 +112,7 @@ class SpammerBlock:
             if not os.path.exists(asn_json_result_file):
                 log.warning("ASN JSON result file {} doesn't exist! Ignoring.".format(asn_json_result_file))
             else:
-                log.debug("Using existing result file")
+                log.info("Using existing result file {}".format(asn_json_result_file))
                 with open(asn_json_result_file) as json_file:
                     asn_data = json.load(json_file)
 
@@ -136,42 +141,12 @@ class SpammerBlock:
         # Note: IP-address really isn't a factor here, but IPWhoisASNOrigin class requires a net.
         #       Any net will do for ASN-queries.
         # net = IPWhoisNet(ip, allow_permutations=False)
-        net = IPWhoisNet(ip)
-        if hasattr(IPWhoisASNOrigin, 'ASN_SOURCE_HTTP_IPINFO'):
-            log.debug("Query HTTP from IPinfo.io")
-            if not self.ipinfo_token:
-                log.error("Attempt to use ipinfo.io API without token")
-            # JaTu: https://github.com/HQJaTu/ipwhois/tree/ipinfo.io
-            asn_query = IPWhoisASNOrigin(net, token=self.ipinfo_token)
-            # methods = [IPWhoisASNOrigin.ASN_SOURCE_WHOIS, IPWhoisASNOrigin.ASN_SOURCE_HTTP_IPINFO]
-            methods = [IPWhoisASNOrigin.ASN_SOURCE_HTTP_IPINFO]
-            can_fallback_radb = True
-        else:
-            log.debug("Query HTTP from RADb")
-            if self.ipinfo_token:
-                log.warning("Using RADb for ASN-query. Ignoring ipinfo.io API token.")
-            # Original: https://github.com/secynic/ipwhois
-            asn_query = IPWhoisASNOrigin(net)
-            methods = ['http']
-            can_fallback_radb = False
+        asn_result = self._datasource.lookup(asn)
 
-        # Go query
-        if False:
-            from .ipinfo_io import IPInfoIO
-            log.debug("Using ipinfo.io widget query")
-            asn_query = IPInfoIO()
-
-        try:
-            asn_result = asn_query.lookup(asn='AS{}'.format(asn), asn_methods=methods)
-        except IPWhoisExceptions.ASNOriginLookupError as e:
-            if not can_fallback_radb:
-                raise e
-            asn_query = IPWhoisASNOrigin(net)
-            methods = ['http']
-            asn_result = asn_query.lookup(asn='AS{}'.format(asn), asn_methods=methods)
-        if asn_cache_file:
-            with open(asn_cache_file, "wb") as asn_result_file:
-                pickle.dump(asn_result, asn_result_file)
+        if asn_result and asn_json_result_file:
+            # Don't save nothingness.
+            with open(asn_json_result_file, "w") as asn_result_file:
+                asn_result_file.write(json.dumps(asn_result))
 
         return asn_result
 

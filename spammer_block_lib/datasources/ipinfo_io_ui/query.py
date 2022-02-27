@@ -2,11 +2,19 @@ from typing import Union
 import requests
 import re
 import logging
+from ..datasource_base import DatasourceBase
+
 
 log = logging.getLogger(__name__)
 
 
-class IPInfoIO:
+class IPInfoIO_UI(DatasourceBase):
+    """
+    Class to implement AS-number queries via ipinfo.io.
+    This method uses web GUI for data retrieval.
+    NOTE: Number of queries from sinlge IPv4-address are heavily limited to 5 per day.
+    """
+
     ASN_QUERY_URL = "https://ipinfo.io/widget/AS{0}"
     QUERY_REFERER = r"https://ipinfo.io/"
 
@@ -21,15 +29,9 @@ class IPInfoIO:
 
         return self._session
 
-    def lookup(self, asn: str) -> Union[None, dict]:
-        match = re.search(r'(as)?(\d+)$', asn, re.IGNORECASE)
-        if not match:
-            log.warning("Input '{0}' doesn't look like ASN!".format(asn))
-            return None
-        as_number = int(match.group(2))
-        # log.debug("Query '{0}' looks like AS-number {1}".format(asn, as_number))
+    def lookup(self, as_number: int) -> Union[None, dict]:
         url = self.ASN_QUERY_URL.format(as_number)
-        log.debug("Query ASN '{0}'".format(url))
+        log.info("IPinfo.io UI: Query AS{0} via '{1}'".format(as_number, url))
         sess = self._get_session()
         headers = {
             "Referer": self.QUERY_REFERER

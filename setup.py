@@ -24,7 +24,9 @@ setup(
         'Programming Language :: Python :: 3.9'
     ],
     python_requires='>=3.8, <4',
-    install_requires=['ipwhois', 'netaddr', 'requests'],
+    install_requires=['ipwhois @ git+https://github.com/HQJaTu/ipwhois.git@ipinfo.io',
+                      'netaddr', 'requests'
+                      ],
     scripts=['cli-utils/spammer-block.py', 'cli-utils/spammer-reporter.py'],
     packages=find_packages()
 )

@@ -23,6 +23,7 @@ import sys
 import argparse
 import logging
 from spammer_block_lib import *
+from spammer_block_lib import datasources
 
 log = logging.getLogger(__name__)
 
@@ -34,19 +35,22 @@ def _setup_logger(log_level_in: str) -> None:
     console_handler.propagate = False
     log.addHandler(console_handler)
 
-    if log_level_in not in logging._nameToLevel:
+    if log_level_in.upper() not in logging._nameToLevel:
         raise ValueError("Unkown logging level '{}'!".format(log_level_in))
-    log_level = logging._nameToLevel[log_level_in]
+    log_level = logging._nameToLevel[log_level_in.upper()]
     log.setLevel(log_level)
 
-    whois_log = logging.getLogger('ipwhois.asn')
+    whois_log = logging.getLogger('ipwhois')
     spammer_log = logging.getLogger('spammer_block_lib')
     whois_log.setLevel(log_level)
+    whois_log.addHandler(console_handler)
     spammer_log.setLevel(log_level)
+    spammer_log.addHandler(console_handler)
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Block IP-ranges of a spammer')
+    parser = argparse.ArgumentParser(description='Block IP-ranges of a spammer',
+                                     formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('ip', metavar="IP",
                         help='IPv4 address to query for')
     parser.add_argument('--asn', '-a',
@@ -55,28 +59,44 @@ def main():
                         default=True,
                         help="Don't display any overlapping subnets. Default: yes")
     parser.add_argument('--output-format', '-o', default='postfix',
-                        help='Output format. Default "postfix"')
+                        help='Output format. Choices: ' +
+                             ', '.join(NET_LIST_OUTPUT_OPTIONS) + "\n" +
+                             'Default: "postfix" will produce Postfix CIDR-table')
     parser.add_argument('--output-file',
                         help='Output to a file.')
+    parser.add_argument('--postfix-rule', default=SpammerReporterPostfix.DEFAULT_POSTFIX_RULE,
+                        help='CIDR-table rule to apply for a net.\n'
+                             'Dynamic AS-number assignment with "{{ASN}}".\n'
+                             'Default: "{}"'.format(
+                            SpammerReporterPostfix.DEFAULT_POSTFIX_RULE)
+                        )
     parser.add_argument('--log-level', default="WARNING",
                         help='Set logging level. Python default is: WARNING')
     parser.add_argument('--ipinfo-token', default=None,
                         help='ipinfo.io API access token if using paid ASN query service')
     parser.add_argument('--asn-result-json-file',
-                        help='To conserve ASN-queries, save query result or use existing result from a previous query.')
+                        help='To conserve ASN-queries, save query result\n'
+                             'or use existing result from a previous query.')
     args = parser.parse_args()
 
     _setup_logger(args.log_level)
 
+    # Select datasource
+    # ds = datasources.RADb(args.ip)
+    ds = datasources.IPInfoIO_UI()
+    # ds = datasources.IPInfoIO(args.ip, token=args.ipinfo_token)
+
     # Go process
-    spammer_blocker = SpammerBlock(token=args.ipinfo_token)
+    spammer_blocker = SpammerBlock(ds)
     asn, nets_for_as = spammer_blocker.whois_query(args.ip,
                                                    asn=args.asn,
                                                    asn_json_result_file=args.asn_result_json_file)
 
     # Go output
-    output_formatter_class = OUTPUT_OPTIONS.get(args.output_format, SpammerReporterNone)
+    output_formatter_class = NET_LIST_OUTPUT_OPTIONS.get(args.output_format, SpammerReporterNone)
     output_formatter = output_formatter_class()
+    if isinstance(output_formatter, SpammerReporterPostfix) and args.postfix_rule:
+        output_formatter.rule = args.postfix_rule
     output = output_formatter.report(args.ip, asn, nets_for_as, args.skip_overlapping)
 
     if args.output_file:
