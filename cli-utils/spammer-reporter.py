@@ -26,6 +26,9 @@ from spammer_block_lib import *
 
 log = logging.getLogger(__name__)
 
+DEFAULT_FROM_ADDRESS = "joe.user@example.com"
+DEFAULT_SMTPD_ADDRESS = "127.0.0.1"
+
 
 def _setup_logger():
     log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
@@ -41,6 +44,11 @@ def _setup_logger():
 
 def main():
     parser = argparse.ArgumentParser(description='Report received email as spam')
+    parser.add_argument('--from-address', default=DEFAULT_FROM_ADDRESS,
+                        help="Send mail to Spamcop using given sender address. Default: {}".format(
+                            DEFAULT_FROM_ADDRESS))
+    parser.add_argument('--smtpd-address', default=DEFAULT_SMTPD_ADDRESS,
+                        help="Send mail using SMTPd at address. Default: {}".format(DEFAULT_SMTPD_ADDRESS))
     parser.add_argument('--spamcop-report-address', metavar="REPORT-ADDRESS",
                         help="Report to Spamcop using given address")
     parser.add_argument('--spamcop-report-from-stdin', action="store_true",
@@ -59,13 +67,13 @@ def main():
     if not args.spamcop_report_address:
         raise ValueError("Need --spamcop-report-address !")
 
-    reporter = SpamcopReporter(send_from="joe.user@example.com", send_to=args.spamcop_report_address)
+    reporter = SpamcopReporter(send_from=args.from_address, send_to=args.spamcop_report_address, host=args.args.smtpd_address)
     if args.spamcop_report_from_stdin:
         log.info("Reporting from STDIN pipe")
         try:
             reporter.report_stdin()
-        except Exception as exc:
-            log.error("Reporting failed! Exception: %s" % exc)
+        except Exception:
+            log.exception("Reporting failed!")
     elif args.spamcop_report_from_file:
         log.info("Reporting file: %s" % args.spamcop_report_from_file)
         if not os.path.exists(args.spamcop_report_from_file):
@@ -73,8 +81,8 @@ def main():
             exit(1)
         try:
             reporter.report_files([args.spamcop_report_from_file])
-        except Exception as exc:
-            log.error("Reporting failed! Exception: %s" % exc)
+        except Exception:
+            log.exception("Reporting failed!")
     else:
         raise NotImplementedError("What? Internal logic failure.")
     log.info("Done SpamCop reporting")

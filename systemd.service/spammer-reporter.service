@@ -1,0 +1,9 @@
+[Unit]
+Description=Report received email as spam to SpamCop
+
+[Service]
+ExecStart=/path/to/binary/spammer-reporter-service.py
+Type=notify
+NotifyAccess=main
+WatchdogSec=5s
+Restart=on-failure

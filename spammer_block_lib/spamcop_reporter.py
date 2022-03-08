@@ -5,7 +5,7 @@
 import os
 import sys
 import smtplib
-from os.path import basename
+from typing import Union
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -14,18 +14,61 @@ from email.utils import COMMASPACE, formatdate
 
 class SpamcopReporter:
 
-    def __init__(self, send_from, send_to, host="127.0.0.1"):
+    def __init__(self, send_from: str, send_to: Union[str, list], host: str = "127.0.0.1"):
+        """
+        Send spam report to SpamCop using local SMTPd
+        :param send_from: mail sender, mostly irrelevant and not used
+        :param send_to: SpamCop reporting address
+        :param host: hostname or IP-address to use for sending
+        """
         self.send_from = send_from
         if isinstance(send_to, str):
             self.send_to = [send_to]
         elif isinstance(send_to, list):
             self.send_to = send_to
         else:
-            raise ValueError("Send to needs to be a string or list!")
+            input_type = type(send_to)
+            raise ValueError("Argument send_to needs to be a string or list! Got: {}".format(input_type))
+
         self.subject = "Spam report"
         self.mail_server = host
 
-    def _create_message(self):
+    def report_string(self, message: str, attachment_filename: str) -> None:
+        msg = self._create_message()
+        part = MIMEApplication(
+            message,
+            Name=attachment_filename
+        )
+        # After the file is closed
+        part['Content-Disposition'] = 'attachment; filename="{}"'.format(attachment_filename)
+        msg.attach(part)
+
+        self._send_message(msg)
+
+    def report_stdin(self) -> None:
+        message = sys.stdin.read()
+        filename = 'spam-mail.txt'
+
+        self.report_string(message, filename)
+
+    def report_files(self, files: list) -> None:
+        msg = self._create_message()
+        for filename in files:
+            if not os.path.exists(filename):
+                raise ValueError("File {} does not exist!".format(filename))
+            file_basename = os.path.basename(filename)
+            with open(filename, "rb") as fil:
+                part = MIMEApplication(
+                    fil.read(),
+                    Name=file_basename
+                )
+            # After the file is closed
+            part['Content-Disposition'] = 'attachment; filename="{}"'.format(file_basename)
+            msg.attach(part)
+
+        self._send_message(msg)
+
+    def _create_message(self) -> MIMEMultipart:
         msg = MIMEMultipart()
         msg['From'] = self.send_from
         msg['To'] = COMMASPACE.join(self.send_to)
@@ -36,37 +79,7 @@ class SpamcopReporter:
 
         return msg
 
-    def report_stdin(self):
-        msg = self._create_message()
-        fil = sys.stdin
-        filename = 'spam-mail.txt'
-        part = MIMEApplication(
-            fil.read(),
-            Name=filename
-        )
-        # After the file is closed
-        part['Content-Disposition'] = 'attachment; filename="%s"' % filename
-        msg.attach(part)
-
-        smtp = smtplib.SMTP(self.mail_server)
-        smtp.sendmail(self.send_from, self.send_to, msg.as_string())
-        smtp.close()
-
-    def report_files(self, files):
-        assert isinstance(files, list)
-        msg = self._create_message()
-        for file in files:
-            if not os.path.exists(file):
-                raise ValueError("File %s does not exist!" % file)
-            with open(file, "rb") as fil:
-                part = MIMEApplication(
-                    fil.read(),
-                    Name=basename(file)
-                )
-            # After the file is closed
-            part['Content-Disposition'] = 'attachment; filename="%s"' % basename(file)
-            msg.attach(part)
-
+    def _send_message(self, msg: MIMEMultipart) -> None:
         smtp = smtplib.SMTP(self.mail_server)
         smtp.sendmail(self.send_from, self.send_to, msg.as_string())
         smtp.close()
