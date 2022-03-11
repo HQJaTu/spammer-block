@@ -23,11 +23,8 @@ import os
 import sys
 import systemd_watchdog
 import argparse
-from pydbus import SystemBus, SessionBus
+from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
-import asyncio
-from asyncinotify import Inotify, Mask
-import gbulb
 import logging
 from spammer_block_lib import dbus
 
@@ -75,43 +72,12 @@ def _systemd_mock_watchdog() -> bool:
     return True
 
 
-async def dir_watcher():
-    """
-    Docs: https://asyncinotify.readthedocs.io/en/latest/
-    Example:
-     Inotify event in /tmp/fubar: <Event name=PosixPath('juttu') mask=<Mask.CREATE: 256> cookie=0 watch=<Watch path=PosixPath('/tmp/fubar') mask=<Mask.CREATE|MOVE|MOVED_TO|MOVED_FROM|MODIFY: 450>>>
-     Path: PosixPath('/tmp/fubar/juttu')
-    :return:
-    """
-    dir = '/tmp/fubar'
-
-    # Context manager to close the inotify handle after use
-    with Inotify() as inotify:
-        # Adding the watch can also be done outside of the context manager.
-        # __enter__ doesn't actually do anything except return self.
-        # This returns an asyncinotify.inotify.Watch instance
-        inotify.add_watch(dir, Mask.MODIFY | Mask.CREATE | Mask.MOVE)
-
-        # Iterate events forever, yielding them one at a time
-        async for event in inotify:
-            # Events have a helpful __repr__.  They also have a reference to
-            # their Watch instance.
-            log.debug("Inotify event in {}: {}".format(dir, event))
-
-            # the contained path may or may not be valid UTF-8.  See the note
-            # below
-            log.debug("  Path: {}".format(repr(event.path)))
-
-
 def monitor_dbus(watchdog_time: int, send_from: str, send_to: str, host: str) -> None:
     wd = systemd_watchdog.watchdog()
 
-    bus = SessionBus()
-    # bus = SystemBus()
-    bus.publish(
-        dbus.SpamReporterService.SPAM_REPORTER_SERVICE_BUS_NAME,
-        dbus.SpamReporterService(send_from, send_to, host)
-    )
+    DBusGMainLoop(set_as_default=True)
+    loop = GLib.MainLoop()
+    monitor = dbus.SpamReporterService(send_from, send_to, host)
 
     if wd.is_enabled:
         # Sets a function to be called at regular intervals with the default priority, G_PRIORITY_DEFAULT.
@@ -121,28 +87,21 @@ def monitor_dbus(watchdog_time: int, send_from: str, send_to: str, host: str) ->
         wd.ready()
     else:
         log.info("Systemd Watchdog not enabled")
-        GLib.timeout_add_seconds(watchdog_time, _systemd_mock_watchdog)
+        #GLib.timeout_add_seconds(watchdog_time, _systemd_mock_watchdog)
 
     # Go loop until forever.
-    log.debug("Going for asyncio event loop using GLib main loop")
-    asyncio.set_event_loop_policy(gbulb.GLibEventLoopPolicy())
-    loop = asyncio.get_event_loop()
+    log.debug("Going for GObject main loop")
     try:
-        # loop.run_forever()
-        loop.run_until_complete(dir_watcher())
+        loop.run()
     except KeyboardInterrupt:
         pass
-    finally:
-        loop.run_until_complete(loop.shutdown_asyncgens())
-        loop.close()
     log.info("Done monitoring for outgoing spam.")
 
 
 def main():
     parser = argparse.ArgumentParser(description='SpamCop reporter daemon')
     parser.add_argument('--from-address', default=DEFAULT_FROM_ADDRESS,
-                        help="Send mail to Spamcop using given sender address. Default: {}".format(
-                            DEFAULT_FROM_ADDRESS))
+                        help="Send mail to Spamcop using given sender address. Default: {}".format(DEFAULT_FROM_ADDRESS))
     parser.add_argument('--smtpd-address', default=DEFAULT_SMTPD_ADDRESS,
                         help="Send mail using SMTPd at address. Default: {}".format(DEFAULT_SMTPD_ADDRESS))
     parser.add_argument('--spamcop-report-address', metavar="REPORT-ADDRESS",
