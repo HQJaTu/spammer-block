@@ -22,7 +22,8 @@ import os
 import sys
 import argparse
 import logging
-from spammer_block_lib import *
+from pydbus import SystemBus, SessionBus
+from spammer_block_lib import SpamcopReporter
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +43,20 @@ def _setup_logger():
     lib_log.setLevel(logging.INFO)
 
 
+def dbus_reporter():
+    bus = SessionBus()
+    # bus = SystemBus()
+
+    # get the object
+    bus_name = "com.spamcop.Reporter"
+    the_object = bus.get(bus_name)
+
+    # call the methods and print the results
+    log.info("Sending Ping into D-Bus {}".format(bus_name))
+    reply = the_object.Ping()
+    log.info("Response: {}".format(reply))
+
+
 def main():
     parser = argparse.ArgumentParser(description='Report received email as spam')
     parser.add_argument('--from-address', default=DEFAULT_FROM_ADDRESS,
@@ -58,6 +73,8 @@ def main():
     args = parser.parse_args()
     _setup_logger()
 
+    dbus_reporter()
+
     # Spamcop-stuff
     if not args.spamcop_report_from_stdin and not args.spamcop_report_from_file:
         log.warning("No arguments given. Printing help.")
@@ -67,7 +84,8 @@ def main():
     if not args.spamcop_report_address:
         raise ValueError("Need --spamcop-report-address !")
 
-    reporter = SpamcopReporter(send_from=args.from_address, send_to=args.spamcop_report_address, host=args.args.smtpd_address)
+    reporter = SpamcopReporter(send_from=args.from_address, send_to=args.spamcop_report_address,
+                               host=args.args.smtpd_address)
     if args.spamcop_report_from_stdin:
         log.info("Reporting from STDIN pipe")
         try:

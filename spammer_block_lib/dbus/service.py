@@ -21,33 +21,40 @@
 
 import os
 from typing import Union
-from dbus import (SessionBus, service)
+from pydbus import SessionBus
 from spammer_block_lib import SpamcopReporter
 import logging
 
 log = logging.getLogger(__name__)
 
-# Docs:
-# https://dbus.freedesktop.org/doc/dbus-tutorial.html#bus-names
-SPAM_REPORTER_SERVICE_BUS_NAME = "com.spamcop.Reporter"
 
 
-class SpamReporterService(service.Object):
-    SPAM_REPORTER_SERVICE = SPAM_REPORTER_SERVICE_BUS_NAME.split('.')
-    OPATH = "/" + "/".join(SPAM_REPORTER_SERVICE)
+class SpamReporterService():
+    """
+      <node>
+        <interface name='com.spamcop.Reporter'>
+          <method name='Ping'>
+            <arg type='s' name='response' direction='out'/>
+          </method>
+          <method name='ReportFile'>
+            <arg type='s' name='filename' direction='in'/>
+            <arg type='s' name='response' direction='out'/>
+          </method>
+        </interface>
+      </node>
+    """
+
+    # Docs:
+    # https://dbus.freedesktop.org/doc/dbus-tutorial.html#bus-names
+    # and
+    # https://github.com/LEW21/pydbus/blob/master/doc/tutorial.rst
+    SPAM_REPORTER_SERVICE_BUS_NAME = "com.spamcop.Reporter"
 
     def __init__(self, send_from: str, send_to: Union[str, list], host: str = "127.0.0.1"):
-        bus = SessionBus()
-        bus.request_name(SPAM_REPORTER_SERVICE_BUS_NAME)
-        bus_name = service.BusName(SPAM_REPORTER_SERVICE_BUS_NAME, bus=bus)
-        service.Object.__init__(self, bus_name, self.OPATH)
-
         self.from_address = send_from
         self.spamcop_report_address = send_to
         self.smtpd_host = host
 
-    @service.method(dbus_interface=SPAM_REPORTER_SERVICE_BUS_NAME,
-                    in_signature=None, out_signature="s")
     def Ping(self):
         """
         Method docs:
@@ -60,8 +67,6 @@ class SpamReporterService(service.Object):
 
         return "pong"
 
-    @service.method(dbus_interface=SPAM_REPORTER_SERVICE_BUS_NAME,
-                    in_signature="s", out_signature="s")
     def ReportFile(self, filename: str):
         """
         Method docs:
