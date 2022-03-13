@@ -74,14 +74,17 @@ class SpamReporterService(service.Object):
         :return:
         """
         log.info("ping received")
+
+        # Get a BusConnection-object of this call and query for more details.
         if self.connection._bus_type == 0:
             bus_type = "session"
         elif self.connection._bus_type == 1:
             bus_type = "system"
         else:
             bus_type = "unknown"
-        # The the BusConnection-object of this call and query for more details.
         unix_user_id = self.connection.get_unix_user(SPAM_REPORTER_SERVICE_BUS_NAME)
+
+        # Get details of user ID making the request
         unix_user_passwd_record = getpwuid(unix_user_id)
         if unix_user_passwd_record:
             user = unix_user_passwd_record.pw_name
