@@ -37,11 +37,21 @@ class SpamReporterService(service.Object):
     SPAM_REPORTER_SERVICE = SPAM_REPORTER_SERVICE_BUS_NAME.split('.')
     OPATH = "/" + "/".join(SPAM_REPORTER_SERVICE)
 
-    def __init__(self, send_from: str, send_to: Union[str, list],
+    def __init__(self, use_system_bus: bool,
+                 send_from: str, send_to: Union[str, list],
                  loop: mainloop.NativeMainLoop,
-                 host: str = "127.0.0.1"):
-        bus = SessionBus(mainloop=loop)
-        # bus = SystemBus(mainloop=loop)
+                 smtpd_host: str = "127.0.0.1"):
+        # Which bus to use for publishing?
+        self._use_system_bus = use_system_bus
+        if use_system_bus:
+            # Global, system wide
+            bus = SystemBus(mainloop=loop)
+            log.debug("Using SystemBus for interface {}".format(SPAM_REPORTER_SERVICE_BUS_NAME))
+        else:
+            # User's own
+            bus = SessionBus(mainloop=loop)
+            log.debug("Using SessionBus for interface {}".format(SPAM_REPORTER_SERVICE_BUS_NAME))
+
         bus.request_name(SPAM_REPORTER_SERVICE_BUS_NAME)
         bus_name = service.BusName(SPAM_REPORTER_SERVICE_BUS_NAME, bus=bus)
         service.Object.__init__(self, bus_name, self.OPATH)
@@ -49,7 +59,7 @@ class SpamReporterService(service.Object):
         self._loop = loop
         self.from_address = send_from
         self.spamcop_report_address = send_to
-        self.smtpd_host = host
+        self.smtpd_host = smtpd_host
 
     @service.method(dbus_interface=SPAM_REPORTER_SERVICE_BUS_NAME,
                     in_signature=None, out_signature="s")
@@ -59,9 +69,18 @@ class SpamReporterService(service.Object):
         https://dbus.freedesktop.org/doc/dbus-python/dbus.service.html?highlight=method#dbus.service.method
         Signature docs:
         https://dbus.freedesktop.org/doc/dbus-specification.html#basic-types
+        Source code:
+        https://github.com/freedesktop/dbus-python/blob/master/dbus/service.py
         :return:
         """
-        log.warning("ping received")
+        log.info("ping received")
+        if self.connection._bus_type == 0:
+            bus_type = "session"
+        elif self.connection._bus_type == 1:
+            bus_type = "system"
+        else:
+            bus_type = "unknown"
+        # The the BusConnection-object of this call and query for more details.
         unix_user_id = self.connection.get_unix_user(SPAM_REPORTER_SERVICE_BUS_NAME)
         unix_user_passwd_record = getpwuid(unix_user_id)
         if unix_user_passwd_record:
@@ -73,7 +92,7 @@ class SpamReporterService(service.Object):
         else:
             user = 'John Doe?'
 
-        return "Hi {}! pong".format(user)
+        return "Hi {} in {}-bus! pong".format(user, bus_type)
 
     @service.method(dbus_interface=SPAM_REPORTER_SERVICE_BUS_NAME,
                     in_signature="s", out_signature="s")

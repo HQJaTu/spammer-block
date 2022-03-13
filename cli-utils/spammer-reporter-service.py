@@ -34,6 +34,9 @@ from spammer_block_lib import dbus
 log = logging.getLogger(__name__)
 wd = None
 
+BUS_SYSTEM = "system"
+BUS_SESSION = "session"
+
 DEFAULT_SYSTEMD_WATCHDOG_TIME = 5
 DEFAULT_FROM_ADDRESS = "joe.user@example.com"
 DEFAULT_SMTPD_ADDRESS = "127.0.0.1"
@@ -75,7 +78,8 @@ def _systemd_mock_watchdog() -> bool:
     return True
 
 
-def monitor_dbus(watchdog_time: int, send_from: str, send_to: str, host: str) -> None:
+def monitor_dbus(use_system_bus: bool, watchdog_time: int,
+                 send_from: str, send_to: str, smtpd_host: str) -> None:
     wd = systemd_watchdog.watchdog()
 
     # DBusGMainLoop(set_as_default=True)
@@ -85,7 +89,10 @@ def monitor_dbus(watchdog_time: int, send_from: str, send_to: str, host: str) ->
     loop = asyncio.get_event_loop()
 
     # Publish the service into D-Bus
-    dbus.SpamReporterService(send_from, send_to, dbus_loop, host)
+    dbus.SpamReporterService(
+        use_system_bus,
+        send_from, send_to, dbus_loop, smtpd_host
+    )
 
     if wd.is_enabled:
         # Sets a function to be called at regular intervals with the default priority, G_PRIORITY_DEFAULT.
@@ -117,6 +124,8 @@ def monitor_dbus(watchdog_time: int, send_from: str, send_to: str, host: str) ->
 
 def main() -> None:
     parser = argparse.ArgumentParser(description='SpamCop reporter daemon')
+    parser.add_argument('bus_type', metavar='BUS-TYPE-TO-USE', choices=[BUS_SYSTEM, BUS_SESSION],
+                        help="D-bus type to use. Choices: {}".format(', '.join([BUS_SYSTEM, BUS_SESSION])))
     parser.add_argument('--from-address', default=DEFAULT_FROM_ADDRESS,
                         help="Send mail to Spamcop using given sender address. Default: {}".format(
                             DEFAULT_FROM_ADDRESS))
@@ -137,9 +146,17 @@ def main() -> None:
         log.error("Need --spamcop-report-address")
         exit(2)
 
+    if args.bus_type == BUS_SYSTEM:
+        using_system_bus = True
+    elif args.bus_type == BUS_SESSION:
+        using_system_bus = False
+    else:
+        raise ValueError("Internal: Which bus?")
+
     log.info('Starting up ...')
 
     monitor_dbus(
+        using_system_bus,
         args.watchdog_time,
         args.from_address,
         args.spamcop_report_address,
