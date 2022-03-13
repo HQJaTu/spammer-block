@@ -7,3 +7,9 @@ Type=notify
 NotifyAccess=main
 WatchdogSec=5s
 Restart=on-failure
+StandardOutput=syslog
+StandardError=syslog
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
