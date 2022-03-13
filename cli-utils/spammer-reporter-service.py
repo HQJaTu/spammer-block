@@ -22,9 +22,14 @@
 import os
 import sys
 import systemd_watchdog
+from typing import Optional, AsyncIterator
 import argparse
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
+import asyncio
+from asyncinotify import Inotify, Mask, Event
+import gbulb
+import signal
 import logging
 from spammer_block_lib import dbus
 
@@ -72,12 +77,55 @@ def _systemd_mock_watchdog() -> bool:
     return True
 
 
+async def dir_watcher(inotify: Inotify):
+    """
+    Docs:
+    - https://asyncinotify.readthedocs.io/en/latest/
+    - https://man7.org/linux/man-pages/man7/inotify.7.html
+    Example event:
+     Inotify event in /tmp/fubar: <Event name=PosixPath('juttu') mask=<Mask.CREATE: 256> cookie=0 watch=<Watch path=PosixPath('/tmp/fubar') mask=<Mask.CREATE|MOVE|MOVED_TO|MOVED_FROM|MODIFY: 450>>>
+     Path: PosixPath('/tmp/fubar/juttu')
+    Example bash:
+    $ inotifywait --format '%w%f' -e create -e delete -e close_write /tmp/fubar/ | xargs /bin/echo
+    :return:
+    """
+    dir = '/tmp/fubar/'
+    if not os.path.isdir(dir):
+        raise ValueError("Given path {} isn't a directory!".format(dir))
+
+    log.debug("Running Inotify for directory: {}".format(dir))
+    inotify.add_watch(dir, Mask.CREATE | Mask.DELETE | Mask.CLOSE_WRITE)
+
+    # Iterate events forever, yielding them one at a time
+    async for event in inotify:
+        # cancellation_event = make_cancellation_event()
+        # async for event in cancellable_aiter(inotify, cancellation_event):
+        # Events have a helpful __repr__.  They also have a reference to
+        # their Watch instance.
+        log.debug("Inotify event in {}: {}".format(event.path, event))
+
+        # the contained path may or may not be valid UTF-8.  See the note
+        # below
+        # log.debug("  Path: {}".format(repr(event.path)))
+        if Mask.DELETE in event:
+            log.warning("While watching for changes in {}, deleted {}".format(event.watch.path, event.path))
+        elif Mask.CREATE in event:
+            log.warning("While watching for changes in {}, created {}".format(event.watch.path, event.path))
+        elif Mask.CLOSE_WRITE in event:
+            log.warning("While watching for changes in {}, wrote into {}".format(event.watch.path, event.path))
+
+
 def monitor_dbus(watchdog_time: int, send_from: str, send_to: str, host: str) -> None:
     wd = systemd_watchdog.watchdog()
 
-    DBusGMainLoop(set_as_default=True)
-    loop = GLib.MainLoop()
-    monitor = dbus.SpamReporterService(send_from, send_to, host)
+    # DBusGMainLoop(set_as_default=True)
+    dbus_loop = DBusGMainLoop()
+    gbulb.install(gtk=False)
+    asyncio.set_event_loop_policy(gbulb.GLibEventLoopPolicy())
+    loop = asyncio.get_event_loop()
+
+    # Publish the service into D-Bus
+    dbus.SpamReporterService(send_from, send_to, dbus_loop, host)
 
     if wd.is_enabled:
         # Sets a function to be called at regular intervals with the default priority, G_PRIORITY_DEFAULT.
@@ -87,21 +135,31 @@ def monitor_dbus(watchdog_time: int, send_from: str, send_to: str, host: str) ->
         wd.ready()
     else:
         log.info("Systemd Watchdog not enabled")
-        #GLib.timeout_add_seconds(watchdog_time, _systemd_mock_watchdog)
+        # GLib.timeout_add_seconds(watchdog_time, _systemd_mock_watchdog)
 
     # Go loop until forever.
-    log.debug("Going for GObject main loop")
+    log.debug("Going for asyncio event loop using GLib main loop. PID: {}".format(os.getpid()))
+    ino = Inotify()
+    task = loop.create_task(dir_watcher(ino))
+
     try:
-        loop.run()
+        loop.run_until_complete(task)
     except KeyboardInterrupt:
-        pass
+        # Avoid "Task was destroyed but it is pending!" -error
+        # GLib task doesn't need cancelling.
+        task.cancel()
+    finally:
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        ino.close()
+        loop.close()
     log.info("Done monitoring for outgoing spam.")
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description='SpamCop reporter daemon')
     parser.add_argument('--from-address', default=DEFAULT_FROM_ADDRESS,
-                        help="Send mail to Spamcop using given sender address. Default: {}".format(DEFAULT_FROM_ADDRESS))
+                        help="Send mail to Spamcop using given sender address. Default: {}".format(
+                            DEFAULT_FROM_ADDRESS))
     parser.add_argument('--smtpd-address', default=DEFAULT_SMTPD_ADDRESS,
                         help="Send mail using SMTPd at address. Default: {}".format(DEFAULT_SMTPD_ADDRESS))
     parser.add_argument('--spamcop-report-address', metavar="REPORT-ADDRESS",

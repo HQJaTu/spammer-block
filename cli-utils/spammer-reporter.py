@@ -21,8 +21,10 @@
 import os
 import sys
 import argparse
+from dbus.mainloop.glib import DBusGMainLoop
+from dbus import (SessionBus, SystemBus, service)
 import logging
-from spammer_block_lib import *
+from spammer_block_lib import SpamcopReporter
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +44,20 @@ def _setup_logger():
     lib_log.setLevel(logging.INFO)
 
 
+def dbus_reporter(filename: str) -> None:
+    bus = SessionBus()
+    # bus = SystemBus()
+
+    # get the object
+    bus_name = "com.spamcop.Reporter"
+    the_object = bus.get(bus_name)
+
+    # call the methods and print the results
+    log.info("Sending Ping into D-Bus {}".format(bus_name))
+    reply = the_object.Ping()
+    log.info("Response: {}".format(reply))
+
+
 def main():
     parser = argparse.ArgumentParser(description='Report received email as spam')
     parser.add_argument('--from-address', default=DEFAULT_FROM_ADDRESS,
@@ -55,36 +71,47 @@ def main():
                         help="Read email from STDIN and report it as spam into Spamcop")
     parser.add_argument('--spamcop-report-from-file', metavar="FILENAME",
                         help="Read email from a RFC2822 file and report it as spam into Spamcop")
+    parser.add_argument('--dbus', action="store_true",
+                        help="Use D-Bus for reporting. Ignoring all arguments, "
+                             "except must use --spamcop-report-from-file.")
     args = parser.parse_args()
     _setup_logger()
 
     # Spamcop-stuff
-    if not args.spamcop_report_from_stdin and not args.spamcop_report_from_file:
-        log.warning("No arguments given. Printing help.")
-        parser.print_help()
-        exit(1)
-
-    if not args.spamcop_report_address:
-        raise ValueError("Need --spamcop-report-address !")
-
-    reporter = SpamcopReporter(send_from=args.from_address, send_to=args.spamcop_report_address, host=args.args.smtpd_address)
-    if args.spamcop_report_from_stdin:
-        log.info("Reporting from STDIN pipe")
-        try:
-            reporter.report_stdin()
-        except Exception:
-            log.exception("Reporting failed!")
-    elif args.spamcop_report_from_file:
-        log.info("Reporting file: %s" % args.spamcop_report_from_file)
-        if not os.path.exists(args.spamcop_report_from_file):
-            log.error("File %s doesn't exist!" % args.spamcop_report_from_file)
+    if args.dbus:
+        if not args.spamcop_report_from_file:
+            log.warning("D-Bus must use --spamcop-report-from-file")
             exit(1)
-        try:
-            reporter.report_files([args.spamcop_report_from_file])
-        except Exception:
-            log.exception("Reporting failed!")
+        dbus_reporter(args.spamcop_report_from_file)
     else:
-        raise NotImplementedError("What? Internal logic failure.")
+        if not args.spamcop_report_from_stdin and not args.spamcop_report_from_file:
+            log.warning("No arguments given. Printing help.")
+            parser.print_help()
+            exit(1)
+
+        if not args.spamcop_report_address:
+            raise ValueError("Need --spamcop-report-address !")
+
+        reporter = SpamcopReporter(send_from=args.from_address, send_to=args.spamcop_report_address,
+                                   host=args.args.smtpd_address)
+        if args.spamcop_report_from_stdin:
+            log.info("Reporting from STDIN pipe")
+            try:
+                reporter.report_stdin()
+            except Exception:
+                log.exception("Reporting failed!")
+        elif args.spamcop_report_from_file:
+            log.info("Reporting file: %s" % args.spamcop_report_from_file)
+            if not os.path.exists(args.spamcop_report_from_file):
+                log.error("File %s doesn't exist!" % args.spamcop_report_from_file)
+                exit(1)
+            try:
+                reporter.report_files([args.spamcop_report_from_file])
+            except Exception:
+                log.exception("Reporting failed!")
+        else:
+            raise NotImplementedError("What? Internal logic failure.")
+
     log.info("Done SpamCop reporting")
     exit(0)
 

@@ -1,7 +1,9 @@
+asyncinotify==2.0.2
 certifi==2021.10.8
 charset-normalizer==2.0.12
 dbus-python==1.2.18
 dnspython==2.0.0
+gbulb==0.6.3
 gobject==0.1.0
 idna==3.3
 ipwhois @ git+https://github.com/HQJaTu/ipwhois.git@9ac857bb7b593052a39919d4fbc7a479079474f4

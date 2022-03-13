@@ -21,7 +21,8 @@
 
 import os
 from typing import Union
-from dbus import (SessionBus, service)
+from dbus import (SessionBus, SystemBus, service, mainloop)
+from pwd import getpwuid
 from spammer_block_lib import SpamcopReporter
 import logging
 
@@ -36,12 +37,16 @@ class SpamReporterService(service.Object):
     SPAM_REPORTER_SERVICE = SPAM_REPORTER_SERVICE_BUS_NAME.split('.')
     OPATH = "/" + "/".join(SPAM_REPORTER_SERVICE)
 
-    def __init__(self, send_from: str, send_to: Union[str, list], host: str = "127.0.0.1"):
-        bus = SessionBus()
+    def __init__(self, send_from: str, send_to: Union[str, list],
+                 loop: mainloop.NativeMainLoop,
+                 host: str = "127.0.0.1"):
+        bus = SessionBus(mainloop=loop)
+        # bus = SystemBus(mainloop=loop)
         bus.request_name(SPAM_REPORTER_SERVICE_BUS_NAME)
         bus_name = service.BusName(SPAM_REPORTER_SERVICE_BUS_NAME, bus=bus)
         service.Object.__init__(self, bus_name, self.OPATH)
 
+        self._loop = loop
         self.from_address = send_from
         self.spamcop_report_address = send_to
         self.smtpd_host = host
@@ -57,8 +62,18 @@ class SpamReporterService(service.Object):
         :return:
         """
         log.warning("ping received")
+        unix_user_id = self.connection.get_unix_user(SPAM_REPORTER_SERVICE_BUS_NAME)
+        unix_user_passwd_record = getpwuid(unix_user_id)
+        if unix_user_passwd_record:
+            user = unix_user_passwd_record.pw_name
+            if unix_user_passwd_record.pw_gecos:
+                gecos = unix_user_passwd_record.pw_gecos.split(',')
+                if gecos[0]:
+                    user = gecos[0]
+        else:
+            user = 'John Doe?'
 
-        return "pong"
+        return "Hi {}! pong".format(user)
 
     @service.method(dbus_interface=SPAM_REPORTER_SERVICE_BUS_NAME,
                     in_signature="s", out_signature="s")

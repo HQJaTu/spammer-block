@@ -1,6 +1,10 @@
 # Spam reporter service
 Systemd service for reporting received email as spam
 
+## Install
+# (as _root_) Copy `spamreporter-dbus.conf` into `/etc/dbus-1/system.d/`
+# `systemctl status dbus`
+
 ## Test send email
 When service is running, see if D-Bus works.
 
