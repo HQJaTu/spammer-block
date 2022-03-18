@@ -16,6 +16,9 @@ Thus, we get a complete map of the network neighbourhood via single address.
 pip install .
 ```
 
+### D-Bus
+See directory `systemd.service/` for details on daemon-based reporting.
+
 ### ipwhois-library
 For querying ASN-data, there is a dependency into https://pypi.org/project/ipwhois/.
 This library will use https://www.radb.net/query/ service for queries. However, the query

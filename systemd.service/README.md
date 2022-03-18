@@ -13,7 +13,7 @@ Note: On a request, default is `--session`.
 Policy install (as _root_):
 1. Copy file `spamreporter-dbus.conf` into directory `/etc/dbus-1/system.d/`
 2. Make policy change effective: `systemctl reload dbus`
-3. Verify service is published:
+3. List available services:
     ```bash
     dbus-send \
       --system \
@@ -25,13 +25,36 @@ Policy install (as _root_):
    Response will contain published interface:
     ```text
     method return time=123.456 sender=org.freedesktop.DBus -> destination=:1.1234 serial=3 reply_serial=2
-   array [
+    array [
       string "org.freedesktop.DBus"
       string "com.spamcop.Reporter"
       ...
-   ]
+    ]
     ```
-5. Done!
+4. Verify published service details:
+    ```bash
+    busctl introspect com.spamcop.Reporter /com/spamcop/Reporter com.spamcop.Reporter
+    ```
+   Response will contain published interface:
+    ```text
+    NAME                 TYPE      SIGNATURE RESULT/VALUE FLAGS
+    .Ping                method    -         s            -
+    .ReportFile          method    s         s            -
+    ```
+5. Test service with a ping:
+    ```bash
+    dbus-send --print-reply \
+      --system \
+      --type=method_call \
+      --dest=com.spamcop.Reporter \
+      /com/spamcop/Reporter com.spamcop.Reporter.Ping
+    ```
+   Response will contain a greeting to the caller:
+    ```text
+    method return time=1647618215.603226 sender=:1.250 -> destination=:1.252 serial=6 reply_serial=2
+       string "Hi Joe User in system-bus! pong"
+    ```
+6. Done!
 
 ## Test ping `--session`
 When service is running, see if D-Bus works.
