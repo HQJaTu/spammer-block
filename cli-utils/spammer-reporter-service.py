@@ -21,7 +21,7 @@
 
 import os
 import sys
-import systemd_watchdog
+from systemd_watchdog import watchdog
 from typing import Optional, AsyncIterator
 import argparse
 from dbus.mainloop.glib import DBusGMainLoop
@@ -32,7 +32,7 @@ import logging
 from spammer_block_lib import dbus
 
 log = logging.getLogger(__name__)
-wd = None
+wd: watchdog = None
 
 BUS_SYSTEM = "system"
 BUS_SESSION = "session"
@@ -59,7 +59,7 @@ def _setup_logger(log_level_in: str) -> None:
     lib_log.addHandler(console_handler)
 
 
-def _systemd_watchdog() -> bool:
+def _systemd_watchdog_keepalive() -> bool:
     # Systemd notifications:
     # https://www.freedesktop.org/software/systemd/man/sd_notify.html
     wd.notify()
@@ -80,7 +80,7 @@ def _systemd_mock_watchdog() -> bool:
 
 def monitor_dbus(use_system_bus: bool, watchdog_time: int,
                  send_from: str, send_to: str, smtpd_host: str) -> None:
-    wd = systemd_watchdog.watchdog()
+    wd = watchdog()
 
     # DBusGMainLoop(set_as_default=True)
     dbus_loop = DBusGMainLoop()
@@ -98,7 +98,7 @@ def monitor_dbus(use_system_bus: bool, watchdog_time: int,
         # Sets a function to be called at regular intervals with the default priority, G_PRIORITY_DEFAULT.
         # https://docs.gtk.org/glib/func.timeout_add_seconds.html
         log.debug("Systemd Watchdog enabled")
-        GLib.timeout_add_seconds(watchdog_time, _systemd_watchdog)
+        GLib.timeout_add_seconds(watchdog_time, _systemd_watchdog_keepalive)
         wd.ready()
     else:
         log.info("Systemd Watchdog not enabled")

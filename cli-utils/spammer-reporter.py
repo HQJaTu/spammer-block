@@ -21,8 +21,6 @@
 import os
 import sys
 import argparse
-from dbus.mainloop.glib import DBusGMainLoop
-from dbus import (SessionBus, SystemBus, service)
 import logging
 from spammer_block_lib import SpamcopReporter
 
@@ -30,32 +28,70 @@ log = logging.getLogger(__name__)
 
 DEFAULT_FROM_ADDRESS = "joe.user@example.com"
 DEFAULT_SMTPD_ADDRESS = "127.0.0.1"
+SPAM_REPORTER_SERVICE_BUS_NAME = "com.spamcop.Reporter"
+
+BUS_SYSTEM = "system"
+BUS_SESSION = "session"
 
 
-def _setup_logger():
+def _setup_logger(log_level_in: str) -> None:
     log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
     console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setFormatter(log_formatter)
     console_handler.propagate = False
     log.addHandler(console_handler)
-    log.setLevel(logging.INFO)
+
+    if log_level_in.upper() not in logging._nameToLevel:
+        raise ValueError("Unkown logging level '{}'!".format(log_level_in))
+    log_level = logging._nameToLevel[log_level_in.upper()]
+    log.setLevel(log_level)
 
     lib_log = logging.getLogger('spammer_block_lib')
-    lib_log.setLevel(logging.INFO)
+    lib_log.setLevel(log_level)
 
 
-def dbus_reporter(filename: str) -> None:
-    bus = SessionBus()
-    # bus = SystemBus()
+def dbus_reporter(use_system_bus: bool, filename: str) -> None:
+    from dbus import (SessionBus, SystemBus, Interface)
+
+    if use_system_bus:
+        # Global, system wide
+        bus = SystemBus()
+        log.debug("Using SystemBus for interface {}".format(SPAM_REPORTER_SERVICE_BUS_NAME))
+    else:
+        # User's own
+        bus = SessionBus()
+        log.debug("Using SessionBus for interface {}".format(SPAM_REPORTER_SERVICE_BUS_NAME))
 
     # get the object
-    bus_name = "com.spamcop.Reporter"
-    the_object = bus.get(bus_name)
+    SPAM_REPORTER_SERVICE = SPAM_REPORTER_SERVICE_BUS_NAME.split('.')
+    OPATH = "/" + "/".join(SPAM_REPORTER_SERVICE)
 
-    # call the methods and print the results
-    log.info("Sending Ping into D-Bus {}".format(bus_name))
-    reply = the_object.Ping()
-    log.info("Response: {}".format(reply))
+    proxy = bus.get_object(SPAM_REPORTER_SERVICE_BUS_NAME, OPATH)
+    iface = Interface(proxy, dbus_interface=SPAM_REPORTER_SERVICE_BUS_NAME)
+
+    if False:
+        # Ping test:
+        # call the methods and print the results
+        log.info("Sending Ping into D-Bus {}".format(SPAM_REPORTER_SERVICE_BUS_NAME))
+        reply = iface.Ping()
+        log.info("Response: {}".format(reply))
+
+        return
+    if False:
+        # Ping test:
+        ping_method = proxy.get_dbus_method('Ping', SPAM_REPORTER_SERVICE_BUS_NAME)
+
+        # call the methods and print the results
+        log.info("Sending Ping into D-Bus {}".format(SPAM_REPORTER_SERVICE_BUS_NAME))
+        reply = ping_method()
+        log.info("Response: {}".format(reply))
+
+        return
+
+    # Report spam
+    log.debug("Sending ReportFile({}) into D-Bus {}".format(filename, SPAM_REPORTER_SERVICE_BUS_NAME))
+    reply = iface.ReportFile(filename)
+    log.debug("Response: {}".format(reply))
 
 
 def main():
@@ -71,18 +107,31 @@ def main():
                         help="Read email from STDIN and report it as spam into Spamcop")
     parser.add_argument('--spamcop-report-from-file', metavar="FILENAME",
                         help="Read email from a RFC2822 file and report it as spam into Spamcop")
-    parser.add_argument('--dbus', action="store_true",
+    parser.add_argument('--dbus', metavar='BUS-TYPE-TO-USE', choices=[BUS_SYSTEM, BUS_SESSION],
                         help="Use D-Bus for reporting. Ignoring all arguments, "
-                             "except must use --spamcop-report-from-file.")
+                             "except must use --spamcop-report-from-file. Choices: {}".format(
+                            ', '.join([BUS_SYSTEM, BUS_SESSION])))
+    parser.add_argument('--log-level', default="WARNING",
+                        help='Set logging level. Python default is: WARNING')
     args = parser.parse_args()
-    _setup_logger()
+    _setup_logger(args.log_level)
 
     # Spamcop-stuff
     if args.dbus:
+        if args.dbus == BUS_SYSTEM:
+            using_system_bus = True
+        elif args.dbus == BUS_SESSION:
+            using_system_bus = False
+        else:
+            raise ValueError("Internal: Which bus?")
+
         if not args.spamcop_report_from_file:
             log.warning("D-Bus must use --spamcop-report-from-file")
             exit(1)
-        dbus_reporter(args.spamcop_report_from_file)
+        if not os.path.exists(args.spamcop_report_from_file):
+            log.error("File %s doesn't exist!" % args.spamcop_report_from_file)
+            exit(1)
+        dbus_reporter(using_system_bus, args.spamcop_report_from_file)
     else:
         if not args.spamcop_report_from_stdin and not args.spamcop_report_from_file:
             log.warning("No arguments given. Printing help.")

@@ -61,6 +61,7 @@ class SpamReporterService(service.Object):
         self.spamcop_report_address = send_to
         self.smtpd_host = smtpd_host
 
+    # noinspection PyPep8Naming
     @service.method(dbus_interface=SPAM_REPORTER_SERVICE_BUS_NAME,
                     in_signature=None, out_signature="s")
     def Ping(self):
@@ -71,7 +72,7 @@ class SpamReporterService(service.Object):
         https://dbus.freedesktop.org/doc/dbus-specification.html#basic-types
         Source code:
         https://github.com/freedesktop/dbus-python/blob/master/dbus/service.py
-        :return:
+        :return: str
         """
         log.info("ping received")
 
@@ -84,6 +85,7 @@ class SpamReporterService(service.Object):
             bus_type = "unknown"
         unix_user_id = self.connection.get_unix_user(SPAM_REPORTER_SERVICE_BUS_NAME)
 
+        greeting = ""
         # Get details of user ID making the request
         unix_user_passwd_record = getpwuid(unix_user_id)
         if unix_user_passwd_record:
@@ -92,11 +94,14 @@ class SpamReporterService(service.Object):
                 gecos = unix_user_passwd_record.pw_gecos.split(',')
                 if gecos[0]:
                     user = gecos[0]
+            greeting = "Hi {}".format(user)
         else:
-            user = 'John Doe?'
+            greeting = "Hi"
+        greeting = "{} in {}-bus! pong".format(greeting, bus_type)
 
-        return "Hi {} in {}-bus! pong".format(user, bus_type)
+        return greeting
 
+    # noinspection PyPep8Naming
     @service.method(dbus_interface=SPAM_REPORTER_SERVICE_BUS_NAME,
                     in_signature="s", out_signature="s")
     def ReportFile(self, filename: str):
@@ -105,7 +110,8 @@ class SpamReporterService(service.Object):
         https://dbus.freedesktop.org/doc/dbus-python/dbus.service.html?highlight=method#dbus.service.method
         Signature docs:
         https://dbus.freedesktop.org/doc/dbus-specification.html#basic-types
-        :return:
+        :param filename, str, filename of spam mail in RFC822 format
+        :return: str, constant "ok"
         """
         reporter = SpamcopReporter(
             send_from=self.from_address,
