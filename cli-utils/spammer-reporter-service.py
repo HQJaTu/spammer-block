@@ -27,7 +27,7 @@ import argparse
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
 import asyncio
-import gbulb
+import asyncio_glib
 import logging
 from spammer_block_lib import dbus
 
@@ -84,9 +84,8 @@ def monitor_dbus(use_system_bus: bool, watchdog_time: int,
 
     # DBusGMainLoop(set_as_default=True)
     dbus_loop = DBusGMainLoop()
-    gbulb.install(gtk=False)
-    asyncio.set_event_loop_policy(gbulb.GLibEventLoopPolicy())
-    loop = asyncio.get_event_loop()
+    asyncio.set_event_loop_policy(asyncio_glib.GLibEventLoopPolicy())
+    asyncio_loop = asyncio.get_event_loop()
 
     # Publish the service into D-Bus
     dbus.SpamReporterService(
@@ -102,23 +101,17 @@ def monitor_dbus(use_system_bus: bool, watchdog_time: int,
         wd.ready()
     else:
         log.info("Systemd Watchdog not enabled")
-        # GLib.timeout_add_seconds(watchdog_time, _systemd_mock_watchdog)
+        GLib.timeout_add_seconds(watchdog_time, _systemd_mock_watchdog)
 
     # Go loop until forever.
     log.debug("Going for asyncio event loop using GLib main loop. PID: {}".format(os.getpid()))
-    ino = dbus.FolderWatcher()
-    task = loop.create_task(ino.dir_watcher())
+    inode_watcher = dbus.FolderWatcher(asyncio_loop)
+    cancel_event = inode_watcher.cancellation_event_factory()
+    task = inode_watcher.watcher_task_factory(cancel_event)
 
-    try:
-        loop.run_until_complete(task)
-    except KeyboardInterrupt:
-        # Avoid "Task was destroyed but it is pending!" -error
-        # GLib task doesn't need cancelling.
-        task.cancel()
-    finally:
-        loop.run_until_complete(loop.shutdown_asyncgens())
-        ino.close()
-        loop.close()
+    log.debug("Enter loop")
+    asyncio_loop.run_until_complete(task)
+    log.debug("Exit loop")
     log.info("Done monitoring for outgoing spam.")
 
 
