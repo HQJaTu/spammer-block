@@ -2,7 +2,10 @@ import os
 import signal
 import asyncio
 from asyncinotify import Inotify, Mask
-from typing import AsyncIterator, TypeVar, Optional
+from typing import AsyncIterator, TypeVar, Optional, Tuple
+from dbus import (Bus, SessionBus, SystemBus, Interface, proxies)
+from pathlib import PosixPath
+from .service import SPAM_REPORTER_SERVICE_BUS_NAME
 import logging
 
 T = TypeVar('T')
@@ -11,8 +14,34 @@ log = logging.getLogger(__name__)
 
 class FolderWatcher:
 
-    def __init__(self, loop: asyncio.AbstractEventLoop):
+    def __init__(self, loop: asyncio.AbstractEventLoop, use_system_bus: bool):
         self._loop = loop
+
+        # D-bus stuff:
+        self.use_system_bus = use_system_bus
+        self._d_bus, \
+        self._spammer_reporter_service_proxy, \
+        self._spammer_reporter_service_iface = self._prep_dbus(use_system_bus)
+
+    def _prep_dbus(self, use_system_bus: bool) -> Tuple[Bus, proxies.ProxyObject, Interface]:
+        if use_system_bus:
+            # Global, system wide
+            bus = SystemBus()
+            log.debug("Using SystemBus for interface {}".format(SPAM_REPORTER_SERVICE_BUS_NAME))
+        else:
+            # User's own
+            bus = SessionBus()
+            log.debug("Using SessionBus for interface {}".format(SPAM_REPORTER_SERVICE_BUS_NAME))
+
+        # Format the service name for bus and interface
+        SPAM_REPORTER_SERVICE = SPAM_REPORTER_SERVICE_BUS_NAME.split('.')
+        OPATH = "/" + "/".join(SPAM_REPORTER_SERVICE)
+
+        # Get the proxy and interface objects for given D-bus
+        proxy = bus.get_object(SPAM_REPORTER_SERVICE_BUS_NAME, OPATH)
+        iface = Interface(proxy, dbus_interface=SPAM_REPORTER_SERVICE_BUS_NAME)
+
+        return bus, proxy, iface
 
     def cancellation_event_factory(self) -> asyncio.Event:
         # Create an event that gets set when the program is interrupted.
@@ -30,8 +59,10 @@ class FolderWatcher:
 
         return cancellation_event
 
-    def watcher_task_factory(self, cancellation_event: asyncio.Event) -> asyncio.Task:
-        task = self._loop.create_task(self._dir_inode_watcher(cancellation_event))
+    def watcher_task_factory(self, cancellation_event: asyncio.Event, dirs: list = None) -> asyncio.Task:
+        if not dirs:
+            raise ValueError("No directories specified to watch")
+        task = self._loop.create_task(self._dir_inode_watcher(cancellation_event, dirs))
 
         return task
 
@@ -49,19 +80,17 @@ class FolderWatcher:
                 return_when=asyncio.FIRST_COMPLETED
             )
             for done_task in done:
-                log.debug("Iterating done tasks")
-                from pprint import pprint
-                pprint(done_task)
+                # log.debug("Cancellable async iterator: Iterating done tasks")
                 if done_task == cancellation_task:
-                    log.warning("Yes. This done task is the cancellation task!")
+                    # XXX
+                    # log.warning("Yes. This done task is the cancellation task!")
                     # The cancellation token has been set, and we should exit.
                     # Cancel any pending tasks. This is safe as there is no await
                     # between the completion of the wait on the cancellation event
                     # and the pending tasks being cancelled. This means that the
                     # pending tasks cannot have done any work.
                     for pending_task in pending:
-                        log.debug("Cancelling pending task:")
-                        pprint(pending_task)
+                        # log.debug("Cancelling a pending task:")
                         pending_task.cancel()
 
                     if False:
@@ -80,9 +109,9 @@ class FolderWatcher:
                     # We have a result from the async iterator.
                     yield done_task.result()
 
-        log.debug("Exiting _cancellable_async_iterator()")
+        # log.debug("Exiting _cancellable_async_iterator()")
 
-    async def _dir_inode_watcher(self, stop_event: asyncio.Event) -> None:
+    async def _dir_inode_watcher(self, stop_event: asyncio.Event, directories_to_watch: list) -> None:
         """
         Docs:
         - https://asyncinotify.readthedocs.io/en/latest/
@@ -95,13 +124,21 @@ class FolderWatcher:
         :return:
         """
 
-        dir = '/tmp/fubar/'
-        if not os.path.isdir(dir):
-            raise ValueError("Given path {} isn't a directory!".format(dir))
+        for directory_to_watch in directories_to_watch:
+            if not os.path.isdir(directory_to_watch):
+                raise ValueError("Given path {} isn't a directory!".format(directory_to_watch))
 
-        log.debug("Running Inotify for directory: {}".format(dir))
         with Inotify() as inotify:
-            inotify.add_watch(dir, Mask.CREATE | Mask.DELETE | Mask.CLOSE_WRITE)
+            # We're watching only new/ subdir of this Maildir.
+            # In Maildir any newly received mail is created into new/. For that create-event can be observed.
+            # If user interacts with MUA and moves mail from another folder to here, a moved-to -event
+            # is received when mail is move into new/.
+            # When MUA sees the new mail, it will be moved into cur/ by MUA.
+            # dir_mask = Mask.CREATE | Mask.DELETE | Mask.CLOSE_WRITE | Mask.MOVE
+            dir_mask = Mask.CREATE | Mask.MOVED_TO
+            for directory_to_watch in directories_to_watch:
+                inotify.add_watch(directory_to_watch, dir_mask)
+                log.debug("Running Inotify for directory: {}".format(directory_to_watch))
 
             # Iterate events forever, yielding them one at a time
             async for event in self._cancellable_async_iterator(inotify, stop_event):
@@ -109,7 +146,8 @@ class FolderWatcher:
                 # async for event in cancellable_aiter(inotify, cancellation_event):
                 # Events have a helpful __repr__.  They also have a reference to
                 # their Watch instance.
-                log.debug("Inotify event in {}: {}".format(event.path, event))
+                # XXX
+                # log.debug("Inotify event in {}: {}".format(event.path, event))
 
                 # the contained path may or may not be valid UTF-8.  See the note
                 # below
@@ -118,7 +156,37 @@ class FolderWatcher:
                     log.warning("While watching for changes in {}, deleted {}".format(event.watch.path, event.path))
                 elif Mask.CREATE in event:
                     log.warning("While watching for changes in {}, created {}".format(event.watch.path, event.path))
+                    self.dbus_reporter(event.path)
                 elif Mask.CLOSE_WRITE in event:
                     log.warning("While watching for changes in {}, wrote into {}".format(event.watch.path, event.path))
+                elif Mask.MOVED_TO in event:
+                    log.warning(
+                        "While watching for changes in {}, file was moved into {}".format(event.watch.path, event.path))
+                    self.dbus_reporter(event.path)
+                elif Mask.MOVED_FROM in event:
+                    log.warning("While watching for changes in {}, file was moved out from {}".format(event.watch.path,
+                                                                                                      event.path))
 
-        log.debug("Done looping Inotify()")
+        # log.debug("Done looping Inotify()")
+
+    def dbus_reporter(self, filename: str) -> None:
+        if isinstance(filename, str):
+            pass
+        elif isinstance(filename, PosixPath):
+            filename = str(filename)
+        else:
+            raise ValueError("Filename isn't in a known type!")
+
+        # As this single-thread process cannot send AND receive, send from an async task.
+        # Note: This particular async-task is a Glib one, not asyncio.
+        log.debug("Sending ReportFile({}) into D-Bus {}".format(filename, SPAM_REPORTER_SERVICE_BUS_NAME))
+        self._spammer_reporter_service_iface.ReportFile(filename,
+                                                        reply_handler=self._dbus_reporter_reply_handler,
+                                                        error_handler=self._dbus_reporter_error_handler,
+                                                        )
+
+    def _dbus_reporter_reply_handler(self, reply: str):
+        log.debug("D-bus reporting response: {}".format(reply))
+
+    def _dbus_reporter_error_handler(self, error: str):
+        log.debug("D-bus reporting error: {}".format(error))

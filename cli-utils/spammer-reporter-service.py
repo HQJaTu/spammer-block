@@ -20,6 +20,7 @@
 # Copyright (c) Jari Turkia
 
 import os
+import pwd
 import sys
 from systemd_watchdog import watchdog
 from typing import Optional, AsyncIterator
@@ -28,6 +29,7 @@ from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
 import asyncio
 import asyncio_glib
+import re
 import logging
 from spammer_block_lib import dbus
 
@@ -40,6 +42,7 @@ BUS_SESSION = "session"
 DEFAULT_SYSTEMD_WATCHDOG_TIME = 5
 DEFAULT_FROM_ADDRESS = "joe.user@example.com"
 DEFAULT_SMTPD_ADDRESS = "127.0.0.1"
+DEFAULT_CONFIG_FILE_NAME = ".spammer-block"
 
 
 def _setup_logger(log_level_in: str) -> None:
@@ -57,6 +60,62 @@ def _setup_logger(log_level_in: str) -> None:
     lib_log = logging.getLogger('spammer_block_lib')
     lib_log.setLevel(log_level)
     lib_log.addHandler(console_handler)
+
+
+def gather_mailboxes_to_watch(maildir_base: str) -> list:
+    dirs_out = []
+    i_am = os.geteuid()
+    if i_am == 0:
+        raise NotImplementedError("Cannot iterate userbase yet")
+    else:
+        users_watchlist = _check_for_config_file(maildir_base, i_am)
+        if users_watchlist:
+            dirs_out.extend(users_watchlist)
+
+    return dirs_out
+
+
+def _check_for_config_file(maildir_base: str, uid: int) -> Optional[list]:
+    home_dir = pwd.getpwuid(uid)[5]
+    if not os.path.exists(home_dir):
+        return None
+
+    config_file = "{}/{}".format(home_dir, DEFAULT_CONFIG_FILE_NAME)
+    if not os.path.exists(config_file):
+        return None
+
+    dirs_out = []
+    with open(config_file, "rt", encoding="utf-8") as config:
+        for line in config:
+            trimmed_line = line.strip()
+            if not trimmed_line:
+                # Skip empty line
+                continue
+            if re.match(r"^#", trimmed_line):
+                # Skip comment
+                continue
+
+            maildir_name = trimmed_line.replace('/', '.')
+
+            # Maildir works with mail arriving at new/, transferring into cur/ when MUA sees it.
+            # We only need to watch new/ as it will see the mail first before MUA moves it to cur/.
+            part = 'new'
+            if maildir_base:
+                physical_dir = "{}/{}/.{}/{}/".format(home_dir, maildir_base, maildir_name, part)
+            else:
+                physical_dir = "{}/.{}/{}/".format(home_dir, maildir_name,part)
+
+            if not os.path.exists(physical_dir):
+                log.warning("User ID {} has Maildir '{}' in {}. It doesn't exist! "
+                            "Skipping.".format(uid, trimmed_line, DEFAULT_CONFIG_FILE_NAME))
+                continue
+            if not os.path.isdir(physical_dir):
+                log.warning("User ID {} has Maildir '{}' in {}. It's a file at: {} "
+                            "Skipping.".format(uid, trimmed_line, physical_dir, DEFAULT_CONFIG_FILE_NAME))
+                continue
+            dirs_out.append(physical_dir)
+
+    return dirs_out
 
 
 def _systemd_watchdog_keepalive() -> bool:
@@ -79,7 +138,8 @@ def _systemd_mock_watchdog() -> bool:
 
 
 def monitor_dbus(use_system_bus: bool, watchdog_time: int,
-                 send_from: str, send_to: str, smtpd_host: str) -> None:
+                 send_from: str, send_to: str, smtpd_host: str,
+                 maildir_base: str) -> None:
     wd = watchdog()
 
     # DBusGMainLoop(set_as_default=True)
@@ -87,12 +147,13 @@ def monitor_dbus(use_system_bus: bool, watchdog_time: int,
     asyncio.set_event_loop_policy(asyncio_glib.GLibEventLoopPolicy())
     asyncio_loop = asyncio.get_event_loop()
 
-    # Publish the service into D-Bus
+    # Publish the interactive service into D-Bus
     dbus.SpamReporterService(
         use_system_bus,
         send_from, send_to, dbus_loop, smtpd_host
     )
 
+    # Systemd watchdog?
     if wd.is_enabled:
         # Sets a function to be called at regular intervals with the default priority, G_PRIORITY_DEFAULT.
         # https://docs.gtk.org/glib/func.timeout_add_seconds.html
@@ -101,13 +162,16 @@ def monitor_dbus(use_system_bus: bool, watchdog_time: int,
         wd.ready()
     else:
         log.info("Systemd Watchdog not enabled")
-        GLib.timeout_add_seconds(watchdog_time, _systemd_mock_watchdog)
+        # GLib.timeout_add_seconds(watchdog_time, _systemd_mock_watchdog)
+
+    # Dirs to watch
+    dirs = gather_mailboxes_to_watch(maildir_base)
+    inode_watcher = dbus.FolderWatcher(asyncio_loop, use_system_bus)
+    cancel_event = inode_watcher.cancellation_event_factory()
+    task = inode_watcher.watcher_task_factory(cancel_event, dirs)
 
     # Go loop until forever.
     log.debug("Going for asyncio event loop using GLib main loop. PID: {}".format(os.getpid()))
-    inode_watcher = dbus.FolderWatcher(asyncio_loop)
-    cancel_event = inode_watcher.cancellation_event_factory()
-    task = inode_watcher.watcher_task_factory(cancel_event)
 
     log.debug("Enter loop")
     asyncio_loop.run_until_complete(task)
@@ -130,6 +194,9 @@ def main() -> None:
                         default=DEFAULT_SYSTEMD_WATCHDOG_TIME,
                         help="How often systemd watchdog is notified. "
                              "Default: {} seconds".format(DEFAULT_SYSTEMD_WATCHDOG_TIME))
+    parser.add_argument('--maildir-base',
+                        help="For every user, email is delivered into Maildir. "
+                             "Per-user base directory name. Default: none")
     parser.add_argument('--log-level', default="WARNING",
                         help='Set logging level. Python default is: WARNING')
     args = parser.parse_args()
@@ -153,7 +220,8 @@ def main() -> None:
         args.watchdog_time,
         args.from_address,
         args.spamcop_report_address,
-        args.smtpd_address
+        args.smtpd_address,
+        args.maildir_base
     )
 
 

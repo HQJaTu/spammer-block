@@ -121,7 +121,8 @@ class SpamReporterService(service.Object):
         log.info("Reporting file: {}".format(filename))
         if not os.path.exists(filename):
             log.error("Input file {} doesn't exist!".format(filename))
-            raise ValueError("Bad input file!")
+
+            return "Bad input file!"
 
         try:
             reporter.report_files([filename])
