@@ -84,3 +84,34 @@ dbus-send \
   --dest=com.spamcop.Reporter \
   /com/spamcop/Reporter com.spamcop.Reporter.ReportFile "string:-FILENAME-HERE-"
 ```
+
+## SSSD
+
+1. Package: `dnf install libsss_simpleifp`
+2. Configuration `/etc/sssd.conf`:
+   ```
+   [domain/-your-domain-name-here-]
+   enumerate = true
+
+   [sssd]
+   services = ....., ifp
+   ```
+3. `systemctl restart sssd`
+4. List available services:
+ ```bash
+ dbus-send \
+   --system \
+   --print-reply \
+   --type=method_call \
+   --dest=org.freedesktop.DBus \
+   /org/freedesktop/DBus org.freedesktop.DBus.ListNames
+ ```
+Response will contain published interface:
+ ```text
+ method return time=123.456 sender=org.freedesktop.DBus -> destination=:1.1234 serial=3 reply_serial=2
+ array [
+   string "org.freedesktop.DBus"
+   string "org.freedesktop.sssd.infopipe"
+   ...
+ ]
+ ```

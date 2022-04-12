@@ -23,7 +23,7 @@ import os
 import pwd
 import sys
 from systemd_watchdog import watchdog
-from typing import Optional, AsyncIterator
+from typing import Optional, Tuple
 import argparse
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
@@ -62,27 +62,43 @@ def _setup_logger(log_level_in: str) -> None:
     lib_log.addHandler(console_handler)
 
 
-def gather_mailboxes_to_watch(maildir_base: str) -> list:
+def gather_mailboxes_to_watch(maildir_base: str, use_sssd: bool) -> list:
     dirs_out = []
     i_am = os.geteuid()
     if i_am == 0:
-        raise NotImplementedError("Cannot iterate userbase yet")
+        users_to_check = []
+        if use_sssd:
+            # If SSSd doesn't roll all the users over, but has enumerate = True in config
+            from spammer_block_lib.dbus import sssd
+            user_getter = sssd.Sssd()
+            for uid in user_getter.users():
+                users_to_check.append(uid)
+        else:
+            for user in pwd.getpwall():
+                users_to_check.append(user[2])
     else:
-        users_watchlist = _check_for_config_file(maildir_base, i_am)
+        users_to_check = [i_am]
+    for uid in users_to_check:
+        user, users_watchlist = _check_for_config_file(maildir_base, uid)
         if users_watchlist:
+            log.info("Found directories to watch for user ID {} ({})".format(uid, user))
             dirs_out.extend(users_watchlist)
 
     return dirs_out
 
 
-def _check_for_config_file(maildir_base: str, uid: int) -> Optional[list]:
-    home_dir = pwd.getpwuid(uid)[5]
+def _check_for_config_file(maildir_base: str, uid: int) -> Tuple[Optional[str], Optional[list]]:
+    pw_data = pwd.getpwuid(uid)
+    if not pw_data:
+        return None, None
+    home_dir = pw_data[5]
+    linux_usr = pw_data[0]
     if not os.path.exists(home_dir):
-        return None
+        return linux_usr, None
 
     config_file = "{}/{}".format(home_dir, DEFAULT_CONFIG_FILE_NAME)
     if not os.path.exists(config_file):
-        return None
+        return linux_usr, None
 
     dirs_out = []
     with open(config_file, "rt", encoding="utf-8") as config:
@@ -103,7 +119,7 @@ def _check_for_config_file(maildir_base: str, uid: int) -> Optional[list]:
             if maildir_base:
                 physical_dir = "{}/{}/.{}/{}/".format(home_dir, maildir_base, maildir_name, part)
             else:
-                physical_dir = "{}/.{}/{}/".format(home_dir, maildir_name,part)
+                physical_dir = "{}/.{}/{}/".format(home_dir, maildir_name, part)
 
             if not os.path.exists(physical_dir):
                 log.warning("User ID {} has Maildir '{}' in {}. It doesn't exist! "
@@ -115,7 +131,7 @@ def _check_for_config_file(maildir_base: str, uid: int) -> Optional[list]:
                 continue
             dirs_out.append(physical_dir)
 
-    return dirs_out
+    return linux_usr, dirs_out
 
 
 def _systemd_watchdog_keepalive() -> bool:
@@ -139,7 +155,7 @@ def _systemd_mock_watchdog() -> bool:
 
 def monitor_dbus(use_system_bus: bool, watchdog_time: int,
                  send_from: str, send_to: str, smtpd_host: str,
-                 maildir_base: str) -> None:
+                 maildir_base: str, use_sssd: bool) -> None:
     wd = watchdog()
 
     # DBusGMainLoop(set_as_default=True)
@@ -165,7 +181,7 @@ def monitor_dbus(use_system_bus: bool, watchdog_time: int,
         # GLib.timeout_add_seconds(watchdog_time, _systemd_mock_watchdog)
 
     # Dirs to watch
-    dirs = gather_mailboxes_to_watch(maildir_base)
+    dirs = gather_mailboxes_to_watch(maildir_base, use_sssd)
     inode_watcher = dbus.FolderWatcher(asyncio_loop, use_system_bus)
     cancel_event = inode_watcher.cancellation_event_factory()
     task = inode_watcher.watcher_task_factory(cancel_event, dirs)
@@ -214,14 +230,14 @@ def main() -> None:
         raise ValueError("Internal: Which bus?")
 
     log.info('Starting up ...')
-
     monitor_dbus(
         using_system_bus,
         args.watchdog_time,
         args.from_address,
         args.spamcop_report_address,
         args.smtpd_address,
-        args.maildir_base
+        args.maildir_base,
+        False
     )
 
 
