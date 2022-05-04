@@ -33,7 +33,9 @@ log = logging.getLogger(__name__)
 
 class FolderWatcher:
 
-    def __init__(self, loop: asyncio.AbstractEventLoop, use_system_bus: bool):
+    SEEN_FILES_BUFFER_SIZE = 100 # items
+
+    def __init__(self, loop: asyncio.AbstractEventLoop, use_system_bus: bool, do_report: bool = True):
         self._loop = loop
 
         # D-bus stuff:
@@ -41,6 +43,9 @@ class FolderWatcher:
         self._d_bus, \
         self._spammer_reporter_service_proxy, \
         self._spammer_reporter_service_iface = self._prep_dbus(use_system_bus)
+
+        self._files_seen = []
+        self.do_report = do_report
 
     def _prep_dbus(self, use_system_bus: bool) -> Tuple[Bus, proxies.ProxyObject, Interface]:
         if use_system_bus:
@@ -135,11 +140,14 @@ class FolderWatcher:
         Docs:
         - https://asyncinotify.readthedocs.io/en/latest/
         - https://man7.org/linux/man-pages/man7/inotify.7.html
+        Note:
+         Inotify event will be triggered once per operation. If a file is moved between directories,
+         the first move will trigger any further moving won't.
         Example event:
          Inotify event in /tmp/fubar: <Event name=PosixPath('juttu') mask=<Mask.CREATE: 256> cookie=0 watch=<Watch path=PosixPath('/tmp/fubar') mask=<Mask.CREATE|MOVE|MOVED_TO|MOVED_FROM|MODIFY: 450>>>
          Path: PosixPath('/tmp/fubar/juttu')
         Example bash:
-        $ inotifywait --format '%w%f' -e create -e delete -e close_write /tmp/fubar/ | xargs /bin/echo
+        $ inotifywait --format '%:e [F:%f W:%w]' -e create -e move -e delete -e close /tmp/fubar/ | xargs /bin/echo
         :return:
         """
 
@@ -153,8 +161,13 @@ class FolderWatcher:
             # If user interacts with MUA and moves mail from another folder to here, a moved-to -event
             # is received when mail is move into new/.
             # When MUA sees the new mail, it will be moved into cur/ by MUA.
-            # dir_mask = Mask.CREATE | Mask.DELETE | Mask.CLOSE_WRITE | Mask.MOVE
+            # dir_mask = Mask.CREATE | Mask.DELETE | Mask.CLOSE_WRITE | Mask.MOVED_FROM | Mask.MOVED_TO | Mask.ACCESS \
+            # | Mask.MOVE_SELF | Mask.CLOSE | Mask.CLOSE_NOWRITE | Mask.MODIFY
+            # This mask works for Mutt when moving mail
             dir_mask = Mask.CREATE | Mask.MOVED_TO
+            # This mask extends previous with Apple Mail moving
+            # Apple Mail moves directory to cur/
+
             for directory_to_watch in directories_to_watch:
                 inotify.add_watch(directory_to_watch, dir_mask)
                 log.debug("Running Inotify for directory: {}".format(directory_to_watch))
@@ -168,23 +181,51 @@ class FolderWatcher:
                 # XXX
                 # log.debug("Inotify event in {}: {}".format(event.path, event))
 
-                # the contained path may or may not be valid UTF-8.  See the note
-                # below
-                # log.debug("  Path: {}".format(repr(event.path)))
+                if not event.path:
+                    continue
+                if os.path.isdir(event.path):
+                    log.warning("While watching for changes in {}, mask event: {} occurred for directory. "
+                                "Skipping.".format(event.watch.path, event.mask)
+                                )
+                    continue
+                filename = os.path.basename(event.path)
+                mail_id = filename.split(',', 1)[0]
+                if mail_id in self._files_seen:
+                    log.debug("We've seen {} already. Skipping.".format(filename))
+                    continue
+
+                # Docs:
+                # Spec: https://cr.yp.to/proto/maildir.html
+                # IMAP, Dovecot: https://doc.dovecot.org/admin_manual/mailbox_formats/maildir/
+
                 if Mask.DELETE in event:
-                    log.warning("While watching for changes in {}, deleted {}".format(event.watch.path, event.path))
+                    log.warning("While watching for changes in {}, deleted {}".format(event.watch.path, filename))
                 elif Mask.CREATE in event:
-                    log.warning("While watching for changes in {}, created {}".format(event.watch.path, event.path))
+                    log.warning("While watching for changes in {}, created {}".format(event.watch.path, filename))
                     self.dbus_reporter(event.path)
                 elif Mask.CLOSE_WRITE in event:
-                    log.warning("While watching for changes in {}, wrote into {}".format(event.watch.path, event.path))
+                    log.warning("While watching for changes in {}, wrote into {}".format(event.watch.path, filename))
+                elif Mask.CLOSE_NOWRITE in event:
+                    log.warning("While watching for changes in {}, wrote into {}".format(event.watch.path, filename))
+                    self.dbus_reporter(event.path)
                 elif Mask.MOVED_TO in event:
                     log.warning(
-                        "While watching for changes in {}, file was moved into {}".format(event.watch.path, event.path))
+                        "While watching for changes in {}, file was moved into {}".format(event.watch.path, filename))
                     self.dbus_reporter(event.path)
                 elif Mask.MOVED_FROM in event:
                     log.warning("While watching for changes in {}, file was moved out from {}".format(event.watch.path,
-                                                                                                      event.path))
+                                                                                                      filename))
+                else:
+                    log.warning("While watching for changes in {}, mask event: {} occurred.".format(
+                        event.watch.path, event.mask
+                    ))
+
+                # Store this for later
+                self._files_seen.append(mail_id)
+
+                # Make sure not to flood our buffer
+                if len(self._files_seen) > self.SEEN_FILES_BUFFER_SIZE:
+                    self._files_seen = self._files_seen[:self.SEEN_FILES_BUFFER_SIZE]
 
         # log.debug("Done looping Inotify()")
 
@@ -195,6 +236,10 @@ class FolderWatcher:
             filename = str(filename)
         else:
             raise ValueError("Filename isn't in a known type!")
+
+        if not self.do_report:
+            log.info("Skip reporting as requested.")
+            return
 
         # As this single-thread process cannot send AND receive, send from an async task.
         # Note: This particular async-task is a Glib one, not asyncio.

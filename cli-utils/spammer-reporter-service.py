@@ -115,21 +115,22 @@ def _check_for_config_file(maildir_base: str, uid: int) -> Tuple[Optional[str], 
 
             # Maildir works with mail arriving at new/, transferring into cur/ when MUA sees it.
             # We only need to watch new/ as it will see the mail first before MUA moves it to cur/.
-            part = 'new'
-            if maildir_base:
-                physical_dir = "{}/{}/.{}/{}/".format(home_dir, maildir_base, maildir_name, part)
-            else:
-                physical_dir = "{}/.{}/{}/".format(home_dir, maildir_name, part)
+            parts = ['new', 'cur']
+            for part in parts:
+                if maildir_base:
+                    physical_dir = "{}/{}/.{}/{}/".format(home_dir, maildir_base, maildir_name, part)
+                else:
+                    physical_dir = "{}/.{}/{}/".format(home_dir, maildir_name, part)
 
-            if not os.path.exists(physical_dir):
-                log.warning("User ID {} has Maildir '{}' in {}. It doesn't exist! "
-                            "Skipping.".format(uid, trimmed_line, DEFAULT_CONFIG_FILE_NAME))
-                continue
-            if not os.path.isdir(physical_dir):
-                log.warning("User ID {} has Maildir '{}' in {}. It's a file at: {} "
-                            "Skipping.".format(uid, trimmed_line, physical_dir, DEFAULT_CONFIG_FILE_NAME))
-                continue
-            dirs_out.append(physical_dir)
+                if not os.path.exists(physical_dir):
+                    log.warning("User ID {} has Maildir '{}' in {}. It doesn't exist! "
+                                "Skipping.".format(uid, trimmed_line, DEFAULT_CONFIG_FILE_NAME))
+                    continue
+                if not os.path.isdir(physical_dir):
+                    log.warning("User ID {} has Maildir '{}' in {}. It's a file at: {} "
+                                "Skipping.".format(uid, trimmed_line, physical_dir, DEFAULT_CONFIG_FILE_NAME))
+                    continue
+                dirs_out.append(physical_dir)
 
     return linux_usr, dirs_out
 
@@ -182,7 +183,7 @@ def monitor_dbus(use_system_bus: bool, watchdog_time: int,
 
     # Dirs to watch
     dirs = gather_mailboxes_to_watch(maildir_base, use_sssd)
-    inode_watcher = dbus.FolderWatcher(asyncio_loop, use_system_bus)
+    inode_watcher = dbus.FolderWatcher(asyncio_loop, use_system_bus, do_report=True)
     cancel_event = inode_watcher.cancellation_event_factory()
     task = inode_watcher.watcher_task_factory(cancel_event, dirs)
 
