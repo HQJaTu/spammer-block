@@ -4,7 +4,6 @@ import re
 import logging
 from ..datasource_base import DatasourceBase
 
-
 log = logging.getLogger(__name__)
 
 
@@ -38,6 +37,10 @@ class IPInfoIO_UI(DatasourceBase):
         }
         response = sess.get(url, headers=headers)
         if response.status_code != 200:
+            if response.status_code == 429:
+                log.error("IPinfo.io free queries exhausted for today!")
+                return None
+
             log.warning("IPinfo.io query returned HTTP/{0}!".format(response.status_code))
             return None
 
