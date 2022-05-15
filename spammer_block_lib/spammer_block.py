@@ -110,7 +110,7 @@ class SpammerBlock:
         if asn_json_result_file:
             # From cache?
             if not os.path.exists(asn_json_result_file):
-                log.warning("ASN JSON result file {} doesn't exist! Ignoring.".format(asn_json_result_file))
+                log.warning("ASN JSON result file {} doesn't exist! Ignoring as input.".format(asn_json_result_file))
             else:
                 log.info("Using existing result file {}".format(asn_json_result_file))
                 with open(asn_json_result_file) as json_file:
@@ -143,8 +143,9 @@ class SpammerBlock:
         # net = IPWhoisNet(ip, allow_permutations=False)
         asn_result = self._datasource.lookup(asn)
 
+        # Don't save nothingness.
         if asn_result and asn_json_result_file:
-            # Don't save nothingness.
+            log.info("Writing ASN JSON result file {}.".format(asn_json_result_file))
             with open(asn_json_result_file, "w") as asn_result_file:
                 asn_result_file.write(json.dumps(asn_result))
 
