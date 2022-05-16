@@ -76,7 +76,9 @@ def main():
                         help='ipinfo.io API access token if using paid ASN query service')
     parser.add_argument('--asn-result-json-file',
                         help='To conserve ASN-queries, save query result\n'
-                             'or use existing result from a previous query.')
+                             'or use existing result from a previous query.\n'
+                             'Dynamic AS-number assignment with "{{ASN}}".'
+                        )
     args = parser.parse_args()
 
     _setup_logger(args.log_level)
