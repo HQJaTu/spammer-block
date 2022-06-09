@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name='spammer-block',
     version='0.6',
-    url='',
+    url='https://github.com/HQJaTu/spammer-block',
     license='GPLv2',
     author='Jari Turkia',
     author_email='jatu@hqcodeshop.fi',
@@ -19,9 +19,9 @@ setup(
         'Intended Audience :: System Administrators',
 
         # Specify the Python versions you support here.
-        'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9'
+        'Programming Language :: Python :: 3.10'
     ],
     python_requires='>=3.8, <4',
     install_requires=['ipwhois @ git+https://github.com/HQJaTu/ipwhois.git@ipinfo.io',
