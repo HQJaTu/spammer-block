@@ -32,8 +32,7 @@ log = logging.getLogger(__name__)
 
 
 class FolderWatcher:
-
-    SEEN_FILES_BUFFER_SIZE = 100 # items
+    SEEN_FILES_BUFFER_SIZE = 100  # items
 
     def __init__(self, loop: asyncio.AbstractEventLoop, use_system_bus: bool, do_report: bool = True):
         self._loop = loop
@@ -188,15 +187,29 @@ class FolderWatcher:
                                 "Skipping.".format(event.watch.path, event.mask)
                                 )
                     continue
-                filename = os.path.basename(event.path)
-                mail_id = filename.split(',', 1)[0]
-                if mail_id in self._files_seen:
-                    log.debug("We've seen {} already. Skipping.".format(filename))
-                    continue
 
                 # Docs:
                 # Spec: https://cr.yp.to/proto/maildir.html
                 # IMAP, Dovecot: https://doc.dovecot.org/admin_manual/mailbox_formats/maildir/
+
+                # Spec states following:
+                # "When you move a file from new to cur, you have to change its name from uniq to uniq:info."
+                # And: "standard filename definition is: <base filename>:2,<flags>"
+
+                # Examples of same mail filename in different states of lifecycle
+                # 'Junk E-mail/new/1654486350.17889_2.mymailserver'
+                # 'Junk E-mail/cur/1654486350.17889_2.mymailserver:2,'
+                # 'Junk E-mail/cur/1654486350.17889_2.mymailserver,S=3506,W=3578:2,S'
+
+                # First get the basename without path
+                filename = os.path.basename(event.path)
+                # Extract the uniq filename part on left side of colon
+                mail_uniq = filename.split(':', 1)[0]
+                # Drop any possible Dovecot fields
+                mail_id = mail_uniq.split(',', 1)[0]
+                if mail_id in self._files_seen:
+                    log.debug("We've seen {} already. Skipping.".format(filename))
+                    continue
 
                 if Mask.DELETE in event:
                     log.warning("While watching for changes in {}, deleted {}".format(event.watch.path, filename))
@@ -210,17 +223,16 @@ class FolderWatcher:
                     self.dbus_reporter(event.path)
                 elif Mask.MOVED_TO in event:
                     log.warning(
-                        "While watching for changes in {}, file was moved into {}".format(event.watch.path, filename))
+                        "While watching for changes in {}, file {} was moved into it".format(event.watch.path, filename))
                     self.dbus_reporter(event.path)
                 elif Mask.MOVED_FROM in event:
-                    log.warning("While watching for changes in {}, file was moved out from {}".format(event.watch.path,
-                                                                                                      filename))
+                    log.warning("While watching for changes in {}, file {} was moved out of it".format(event.watch.path, filename))
                 else:
                     log.warning("While watching for changes in {}, mask event: {} occurred.".format(
                         event.watch.path, event.mask
                     ))
 
-                # Store this for later
+                # Store this mail unique ID for later checking
                 self._files_seen.append(mail_id)
 
                 # Make sure not to flood our buffer
