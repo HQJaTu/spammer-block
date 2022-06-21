@@ -47,21 +47,21 @@ class SpamcopReporter:
         msg.attach(part)
 
         self._send_message(msg)
-        log.debug("Reporting spam from string of length {} characters".format(len(message)))
+        log.debug("SpamCop reporter reporting spam from string of length {} characters".format(len(message)))
 
     def report_stdin(self) -> None:
         message = sys.stdin.read()
         filename = 'spam-mail.txt'
 
         self.report_string(message, filename)
-        log.debug("Reporting spam from stdin")
+        log.debug("SpamCop reporter reporting spam from stdin")
 
     def report_files(self, files: list) -> None:
         msg = self._create_message()
         for filename in files:
             if not os.path.exists(filename):
                 raise ValueError("File {} does not exist!".format(filename))
-            log.debug("Reporting spam from file: {}".format(filename))
+            log.debug("SpamCop reporter reporting spam from file: {}".format(filename))
             file_basename = os.path.basename(filename)
             with open(filename, "rb") as fil:
                 part = MIMEApplication(

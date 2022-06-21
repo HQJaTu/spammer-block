@@ -116,7 +116,7 @@ class SpamReporterService(service.Object):
             send_to=self.spamcop_report_address,
             host=self.smtpd_host
         )
-        log.info("Reporting file: {}".format(filename))
+        log.info("D-Bus service reporting file: {} to SpamCop".format(filename))
         if not os.path.exists(filename):
             log.error("Input file {} doesn't exist!".format(filename))
 

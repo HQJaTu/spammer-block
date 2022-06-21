@@ -23,7 +23,7 @@ class GmailReporter:
         for filename in files:
             if not os.path.exists(filename):
                 raise ValueError("File {} does not exist!".format(filename))
-            log.debug("Reporting spam from file: {}".format(filename))
+            log.debug("Gmail reporter reporting spam from file: {}".format(filename))
             file_basename = os.path.basename(filename)
             with open(filename, "rb") as fil:
                 fil.read(),
