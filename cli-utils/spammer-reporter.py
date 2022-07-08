@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 
 DEFAULT_FROM_ADDRESS = "joe.user@example.com"
 DEFAULT_SMTPD_ADDRESS = "127.0.0.1"
-SPAM_REPORTER_SERVICE_BUS_NAME = "com.spamcop.Reporter"
+SPAM_REPORTER_SERVICE_BUS_NAME = "fi.hqcodeshop.SpamReporter"
 
 BUS_SYSTEM = "system"
 BUS_SESSION = "session"

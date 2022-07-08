@@ -27,13 +27,13 @@ Policy install (as _root_):
     method return time=123.456 sender=org.freedesktop.DBus -> destination=:1.1234 serial=3 reply_serial=2
     array [
       string "org.freedesktop.DBus"
-      string "com.spamcop.Reporter"
+      string "fi.hqcodeshop.SpamReporter"
       ...
     ]
     ```
 4. Verify published service details:
     ```bash
-    busctl introspect com.spamcop.Reporter /com/spamcop/Reporter com.spamcop.Reporter
+    busctl introspect fi.hqcodeshop.SpamReporter /fi/hqcodeshop/SpamReporter fi.hqcodeshop.SpamReporter
     ```
    Response will contain published interface:
     ```text
@@ -46,8 +46,8 @@ Policy install (as _root_):
     dbus-send --print-reply \
       --system \
       --type=method_call \
-      --dest=com.spamcop.Reporter \
-      /com/spamcop/Reporter com.spamcop.Reporter.Ping
+      --dest=fi.hqcodeshop.SpamReporter \
+      /fi/hqcodeshop/SpamReporter fi.hqcodeshop.SpamReporter.Ping
     ```
    Response will contain a greeting to the caller:
     ```text
@@ -64,8 +64,8 @@ Run:
 dbus-send \
   --print-reply \
   --type=method_call \
-  --dest=com.spamcop.Reporter \
-  /com/spamcop/Reporter com.spamcop.Reporter.Ping
+  --dest=fi.hqcodeshop.SpamReporter \
+  /fi/hqcodeshop/SpamReporter fi.hqcodeshop.SpamReporter.Ping
 ```
 
 Response (based on user who sent the ping):
@@ -81,8 +81,8 @@ dbus-send \
   --system \
   --print-reply \
   --type=method_call \
-  --dest=com.spamcop.Reporter \
-  /com/spamcop/Reporter com.spamcop.Reporter.ReportFile "string:-FILENAME-HERE-"
+  --dest=--dest=fi.hqcodeshop.SpamReporter \
+  /fi/hqcodeshop/SpamReporter fi.hqcodeshop.SpamReporter.ReportFile "string:-FILENAME-HERE-"
 ```
 
 ## SSSD

@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 
 # Docs:
 # https://dbus.freedesktop.org/doc/dbus-tutorial.html#bus-names
-SPAM_REPORTER_SERVICE_BUS_NAME = "com.spamcop.Reporter"
+SPAM_REPORTER_SERVICE_BUS_NAME = "fi.hqcodeshop.SpamReporter"
 
 
 class SpamReporterService(service.Object):
