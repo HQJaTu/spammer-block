@@ -69,11 +69,13 @@ def gather_mailboxes_to_watch(maildir_base: str, use_sssd: bool) -> list:
         users_to_check = []
         if use_sssd:
             # If SSSd doesn't roll all the users over, but has enumerate = True in config
+            # use a bigger hammer to get the list of users.
             from spammer_block_lib.dbus import sssd
             user_getter = sssd.Sssd()
             for uid in user_getter.users():
                 users_to_check.append(uid)
         else:
+            # Use standard method for listing all users.
             for user in pwd.getpwall():
                 users_to_check.append(user[2])
     else:
@@ -114,7 +116,9 @@ def _check_for_config_file(maildir_base: str, uid: int) -> Tuple[Optional[str], 
             maildir_name = trimmed_line.replace('/', '.')
 
             # Maildir works with mail arriving at new/, transferring into cur/ when MUA sees it.
-            # We only need to watch new/ as it will see the mail first before MUA moves it to cur/.
+            # 1) Watch new/ as it will see the mail first before MUA moves it to cur/.
+            # 2) Any already received mail will be in cur/ and when moved to another folder will stay in cur/.
+            # Need to watch them both!
             parts = ['new', 'cur']
             for part in parts:
                 if maildir_base:
@@ -185,19 +189,19 @@ def monitor_dbus(use_system_bus: bool, watchdog_time: int,
     dirs = gather_mailboxes_to_watch(maildir_base, use_sssd)
     inode_watcher = dbus.FolderWatcher(asyncio_loop, use_system_bus, do_report=True)
     cancel_event = inode_watcher.cancellation_event_factory()
-    task = inode_watcher.watcher_task_factory(cancel_event, dirs)
+    inode_watcher_task = inode_watcher.watcher_task_factory(cancel_event, dirs)
 
     # Go loop until forever.
     log.debug("Going for asyncio event loop using GLib main loop. PID: {}".format(os.getpid()))
 
     log.debug("Enter loop")
-    asyncio_loop.run_until_complete(task)
+    asyncio_loop.run_until_complete(inode_watcher_task)
     log.debug("Exit loop")
     log.info("Done monitoring for outgoing spam.")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description='SpamCop reporter daemon')
+    parser = argparse.ArgumentParser(description='Spam Email Reporter daemon')
     parser.add_argument('bus_type', metavar='BUS-TYPE-TO-USE', choices=[BUS_SYSTEM, BUS_SESSION],
                         help="D-bus type to use. Choices: {}".format(', '.join([BUS_SYSTEM, BUS_SESSION])))
     parser.add_argument('--from-address', default=DEFAULT_FROM_ADDRESS,
