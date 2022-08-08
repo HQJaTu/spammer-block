@@ -30,6 +30,7 @@ from gi.repository import GLib
 import asyncio
 import asyncio_glib
 import re
+import toml
 import logging
 from spammer_block_lib import dbus
 
@@ -43,13 +44,25 @@ DEFAULT_SYSTEMD_WATCHDOG_TIME = 5
 DEFAULT_FROM_ADDRESS = "joe.user@example.com"
 DEFAULT_SMTPD_ADDRESS = "127.0.0.1"
 DEFAULT_CONFIG_FILE_NAME = ".spammer-block"
+DEFAULT_LOG_LEVEL = "WARNING"
 
 
-def _setup_logger(log_level_in: str) -> None:
-    log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+def _setup_logger(log_level_in: str, watchdog=False) -> None:
+    """
+    Logging setup
+    :param log_level_in:
+    :param watchdog:
+    :return:
+    """
+    if watchdog:
+        # Running as daemon, Systemd will handle timestamping for us
+        log_formatter = logging.Formatter("[%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+    else:
+        log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
     console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setFormatter(log_formatter)
     console_handler.propagate = False
+    log.handlers = []
     log.addHandler(console_handler)
 
     if log_level_in.upper() not in logging._nameToLevel:
@@ -59,7 +72,65 @@ def _setup_logger(log_level_in: str) -> None:
 
     lib_log = logging.getLogger('spammer_block_lib')
     lib_log.setLevel(log_level)
+    lib_log.handlers = []
     lib_log.addHandler(console_handler)
+
+
+def empty_config() -> dict:
+    return {
+        'Reporter': {
+            'from_address': DEFAULT_FROM_ADDRESS,
+            'spamcop_report_address': None,
+            'smtpd_address': DEFAULT_SMTPD_ADDRESS
+        },
+        'Daemon': {
+            'watchdog_time': DEFAULT_SYSTEMD_WATCHDOG_TIME,
+            'maildir_base': None,
+            'log_level': "WARNING"
+        }
+    }
+
+
+def config_from_toml_file(filename: str) -> dict:
+    """
+    Read configuration file.
+    Note: Values from config can be missing or overwritten via command-line arguments.
+    :param filename:
+    :return: dictionary of configuration
+    """
+    toml_path = os.path.abspath(filename)
+    with open(toml_path, "r", encoding="utf-8") as f:
+        toml_string = f.read()
+    parsed_toml = toml.loads(toml_string)
+
+    # Sanity:
+    known_keys = empty_config()
+    for key in parsed_toml:
+        if key not in known_keys:
+            raise ValueError("Unknown key '{}' in Toml-file {}!".format(key, filename))
+        for subkey in parsed_toml[key]:
+            if subkey not in known_keys[key]:
+                raise ValueError("Unknown key '{}.{}' in Toml-file {}!".format(key, subkey, filename))
+
+    # Add directory of .toml file
+    toml_dir = os.path.dirname(toml_path)
+    parsed_toml["toml_dir"] = toml_dir
+
+    # Merge empty config with parsed config.
+    # NOTE: This won't work!
+    # See: https://stackoverflow.com/a/26853961/1548275
+    # config_out = {**known_keys, **parsed_toml}
+    # Will merge subkey incorrectly. Need to walk the entire tree.
+    config_out = {}
+    for key in known_keys:
+        config_out[key] = {}
+        for subkey in known_keys[key]:
+            if subkey in parsed_toml[key]:
+                config_out[key][subkey] = parsed_toml[key][subkey]
+            else:
+                config_out[key][subkey] = known_keys[key][subkey]
+
+    return config_out
 
 
 def gather_mailboxes_to_watch(maildir_base: str, use_sssd: bool) -> list:
@@ -161,8 +232,6 @@ def _systemd_mock_watchdog() -> bool:
 def monitor_dbus(use_system_bus: bool, watchdog_time: int,
                  send_from: str, send_to: str, smtpd_host: str,
                  maildir_base: str, use_sssd: bool) -> None:
-    wd = watchdog()
-
     # DBusGMainLoop(set_as_default=True)
     dbus_loop = DBusGMainLoop()
     asyncio.set_event_loop_policy(asyncio_glib.GLibEventLoopPolicy())
@@ -218,14 +287,14 @@ def main() -> None:
     parser.add_argument('--maildir-base',
                         help="For every user, email is delivered into Maildir. "
                              "Per-user base directory name. Default: none")
-    parser.add_argument('--log-level', default="WARNING",
-                        help='Set logging level. Python default is: WARNING')
+    parser.add_argument('--log-level', default=DEFAULT_LOG_LEVEL,
+                        help='Set logging level. Python default is: {}'.format(DEFAULT_LOG_LEVEL))
+    parser.add_argument('--config-file',
+                        metavar="TOML-CONFIGURATION-FILE",
+                        help="Configuration Toml-file")
     args = parser.parse_args()
 
     _setup_logger(args.log_level)
-    if not args.spamcop_report_address:
-        log.error("Need --spamcop-report-address")
-        exit(2)
 
     if args.bus_type == BUS_SYSTEM:
         using_system_bus = True
@@ -234,14 +303,52 @@ def main() -> None:
     else:
         raise ValueError("Internal: Which bus?")
 
+    # Read configuration?
+    if args.config_file:
+        if not os.path.exists(args.config_file):
+            log.error("Given configuration file '{}' doesn't exist!".format(args.config_file))
+            exit(2)
+        log.debug("Reading configuration from: {}".format(args.config_file))
+        config = config_from_toml_file(args.config_file)
+    else:
+        config = empty_config()
+
+    # Watchdog
+    global wd
+    wd = watchdog()
+
+    # Change log-level?
+    if wd.is_enabled or (args.log_level == DEFAULT_LOG_LEVEL and config['Daemon']['log_level'] != DEFAULT_LOG_LEVEL):
+        # --log-level not specified
+        # Toml-configuration has log-level specified. Re-do logging setup.
+        _setup_logger(config['Daemon']['log_level'], watchdog=wd.is_enabled)
+
+    # Merge CLI-arguments
+    if args.from_address != DEFAULT_FROM_ADDRESS:
+        config['Reporter']['from_address'] = args.from_address
+    if args.spamcop_report_address:
+        config['Reporter']['spamcop_report_address'] = args.spamcop_report_address
+    if args.smtpd_address != DEFAULT_SMTPD_ADDRESS:
+        config['Reporter']['smtpd_address'] = args.smtpd_address
+    if args.watchdog_time != DEFAULT_SYSTEMD_WATCHDOG_TIME:
+        config['Daemon']['watchdog_time'] = args.watchdog_time
+    if args.maildir_base:
+        config['Daemon']['maildir_base'] = args.maildir_base
+
+    # Mandatory argument(s) specified?
+    if not config['Reporter']['spamcop_report_address']:
+        log.error("Need --spamcop-report-address (or --config)")
+        exit(2)
+
+    # Go run the daemon
     log.info('Starting up ...')
     monitor_dbus(
         using_system_bus,
-        args.watchdog_time,
-        args.from_address,
-        args.spamcop_report_address,
-        args.smtpd_address,
-        args.maildir_base,
+        config['Daemon']['watchdog_time'],
+        config['Reporter']['from_address'],
+        config['Reporter']['spamcop_report_address'],
+        config['Reporter']['smtpd_address'],
+        config['Daemon']['maildir_base'],
         False
     )
 

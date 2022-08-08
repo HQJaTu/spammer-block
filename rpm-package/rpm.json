@@ -1,0 +1,64 @@
+{
+  "extensions": {
+    "enabled": [
+      "python_venv",
+      "blocks",
+      "macros",
+      "file_permissions",
+      "file_extras"
+    ]
+  },
+  "core": {
+    "group": "Application/System",
+    "license": "GPLv2",
+    "name": "spammer-block",
+    "summary": "Tool to get CIDRs of a known spammer IP-address by AS-number and report known spam automatically",
+    "version": "0.7.0",
+    "release": "1"
+  },
+  "python_venv": {
+    "cmd": "python3 -m venv",
+    "flags": [
+      "--copies",
+      "--clear"
+    ],
+    "name": "spammer-block",
+    "path": "/usr/libexec/"
+  },
+  "blocks": {
+    "desc": [
+      "Tooling to help fight spam.",
+      "Create block list based on bad Internet neighbourhoods. Report arriving spam automatically."
+    ]
+  },
+  "macros": {
+    "macros": [
+      "__os_install_post %{nil}",
+      "_build_id_links none"
+    ]
+  },
+  "file_permissions": {
+    "user": "root",
+    "group": "root",
+    "create_user": false,
+    "create_group": false
+  },
+  "file_extras": {
+    "files": [
+      {
+        "src": "systemd.service/spammer-reporter.conf",
+        "dest": "etc/dbus-1/system.d/spammer-reporter.conf",
+        "config": "noreplace"
+      },
+      {
+        "src": "systemd.service/spammer-reporter.toml",
+        "dest": "etc/sysconfig/spammer-reporter.toml",
+        "config": "noreplace"
+      },
+      {
+        "src": "systemd.service/spammer-reporter.service",
+        "dest": "usr/lib/systemd/system/spammer-reporter.service"
+      }
+    ]
+  }
+}
