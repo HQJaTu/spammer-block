@@ -1,6 +1,8 @@
 # Spam reporter service
 Systemd service for reporting received email as spam
 
+# D-Bus
+
 ## Bus-types
 For docs, see: https://dbus.freedesktop.org/doc/dbus-python/tutorial.html#connecting-to-the-bus
 
@@ -85,33 +87,35 @@ dbus-send \
   /fi/hqcodeshop/SpamReporter fi.hqcodeshop.SpamReporter.ReportFile "string:-FILENAME-HERE-"
 ```
 
-## SSSD
+# Systemd
 
-1. Package: `dnf install libsss_simpleifp`
-2. Configuration `/etc/sssd.conf`:
-   ```
-   [domain/-your-domain-name-here-]
-   enumerate = true
+## Capabilities
+`.service` definition has following:
 
-   [sssd]
-   services = ....., ifp
-   ```
-3. `systemctl restart sssd`
-4. List available services:
- ```bash
- dbus-send \
-   --system \
-   --print-reply \
-   --type=method_call \
-   --dest=org.freedesktop.DBus \
-   /org/freedesktop/DBus org.freedesktop.DBus.ListNames
- ```
-Response will contain published interface:
- ```text
- method return time=123.456 sender=org.freedesktop.DBus -> destination=:1.1234 serial=3 reply_serial=2
- array [
-   string "org.freedesktop.DBus"
-   string "org.freedesktop.sssd.infopipe"
-   ...
- ]
- ```
+    CapabilityBoundingSet=CAP_AUDIT_WRITE CAP_DAC_READ_SEARCH CAP_IPC_LOCK CAP_SYS_NICE
+
+`man 7 capabilities` @ https://man7.org/linux/man-pages/man7/capabilities.7.html
+
+* **CAP_AUDIT_WRITE** (since Linux 2.6.11)
+  * Write records to kernel auditing log.
+* **CAP_DAC_READ_SEARCH**
+  * Bypass file read permission checks and directory read and execute permission checks;
+  * invoke open_by_handle_at(2);
+  * use the linkat(2) AT_EMPTY_PATH flag to create a link to a file referred to by a file descriptor.
+* **CAP_IPC_LOCK**
+  * Lock memory (mlock(2), mlockall(2), mmap(2), shmctl(2));
+  * Allocate memory using huge pages (memfd_create(2), mmap(2), shmctl(2)).
+* **CAP_SYS_NICE**
+  * Lower the process nice value (nice(2), setpriority(2)) and change the nice value for arbitrary processes;
+  * set real-time scheduling policies for calling process, and set scheduling policies and priorities for arbitrary processes (sched_setscheduler(2), sched_setparam(2), sched_setattr(2));
+  * set CPU affinity for arbitrary processes (sched_setaffinity(2));
+  * set I/O scheduling class and priority for arbitrary processes (ioprio_set(2));
+  * apply migrate_pages(2) to arbitrary processes and allow processes to be migrated to arbitrary nodes;
+  * apply move_pages(2) to arbitrary processes;
+  * use the MPOL_MF_MOVE_ALL flag with mbind(2) and move_pages(2).
+
+## Checking effective capabilities of the service
+
+1. Find PID, `systemctl status spammer-reporter`
+2. Run command: `gawk '/^CapEff/ {print $2}' /proc/<PID-OF-PROCESS>/status | xargs -n1 -I {} capsh --decode={}`
+3. Expected output: `0x0000000020804004=cap_dac_read_search,cap_ipc_lock,cap_sys_nice,cap_audit_write`
