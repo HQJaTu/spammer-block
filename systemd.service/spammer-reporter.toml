@@ -7,3 +7,4 @@ smtpd_address = ""
 watchdog_time = 15
 maildir_base = ""
 log_level = "WARNING"
+force_root_override = false

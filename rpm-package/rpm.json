@@ -14,7 +14,7 @@
     "name": "spammer-block",
     "summary": "Tool to get CIDRs of a known spammer IP-address by AS-number and report known spam automatically",
     "version": "0.7.0",
-    "release": "1"
+    "release": "3"
   },
   "python_venv": {
     "cmd": "python3 -m venv",
@@ -27,8 +27,16 @@
   },
   "blocks": {
     "desc": [
-      "Tooling to help fight spam.",
-      "Create block list based on bad Internet neighbourhoods. Report arriving spam automatically."
+      "Tooling to help fight unsolicited email aka. spam.",
+      "From identified spam email:",
+      "1) Create IP-block list based on bad Internet neighbourhoods",
+      "2) Automated reporting of spam based on user interaction or block-list"
+    ],
+    "changelog": [
+      "* Sun Aug 12 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.0-3",
+      "- Added %attr definition to extra files",
+      "* Sun Aug 12 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.0-2",
+      "- Added force_root_override into Toml-configuration"
     ]
   },
   "macros": {
@@ -53,7 +61,8 @@
       {
         "src": "systemd.service/spammer-reporter.toml",
         "dest": "etc/sysconfig/spammer-reporter.toml",
-        "config": "noreplace"
+        "config": "noreplace",
+        "attr": "640, -, nobody"
       },
       {
         "src": "systemd.service/spammer-reporter.service",

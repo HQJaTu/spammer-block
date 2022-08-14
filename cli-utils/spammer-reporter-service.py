@@ -86,7 +86,8 @@ def empty_config() -> dict:
         'Daemon': {
             'watchdog_time': DEFAULT_SYSTEMD_WATCHDOG_TIME,
             'maildir_base': None,
-            'log_level': "WARNING"
+            'log_level': "WARNING",
+            'force_root_override': False
         }
     }
 
@@ -133,10 +134,10 @@ def config_from_toml_file(filename: str) -> dict:
     return config_out
 
 
-def gather_mailboxes_to_watch(maildir_base: str, use_sssd: bool) -> list:
+def gather_mailboxes_to_watch(maildir_base: str, force_root_override: bool, use_sssd: bool) -> list:
     dirs_out = []
     i_am = os.geteuid()
-    if i_am == 0:
+    if i_am == 0 or force_root_override:
         users_to_check = []
         if use_sssd:
             # If SSSd doesn't roll all the users over, but has enumerate = True in config
@@ -231,7 +232,8 @@ def _systemd_mock_watchdog() -> bool:
 
 def monitor_dbus(use_system_bus: bool, watchdog_time: int,
                  send_from: str, send_to: str, smtpd_host: str,
-                 maildir_base: str, use_sssd: bool) -> None:
+                 maildir_base: str,
+                 force_root_override: bool, use_sssd: bool) -> None:
     # DBusGMainLoop(set_as_default=True)
     dbus_loop = DBusGMainLoop()
     asyncio.set_event_loop_policy(asyncio_glib.GLibEventLoopPolicy())
@@ -255,7 +257,7 @@ def monitor_dbus(use_system_bus: bool, watchdog_time: int,
         # GLib.timeout_add_seconds(watchdog_time, _systemd_mock_watchdog)
 
     # Dirs to watch
-    dirs = gather_mailboxes_to_watch(maildir_base, use_sssd)
+    dirs = gather_mailboxes_to_watch(maildir_base, force_root_override, use_sssd)
     inode_watcher = dbus.FolderWatcher(asyncio_loop, use_system_bus, do_report=True)
     cancel_event = inode_watcher.cancellation_event_factory()
     inode_watcher_task = inode_watcher.watcher_task_factory(cancel_event, dirs)
@@ -349,6 +351,7 @@ def main() -> None:
         config['Reporter']['spamcop_report_address'],
         config['Reporter']['smtpd_address'],
         config['Daemon']['maildir_base'],
+        config['Daemon']['force_root_override'],
         False
     )
 

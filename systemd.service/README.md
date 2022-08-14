@@ -114,8 +114,22 @@ dbus-send \
   * apply move_pages(2) to arbitrary processes;
   * use the MPOL_MF_MOVE_ALL flag with mbind(2) and move_pages(2).
 
+## UID / GID of the service
+Service is run as _root_.
+
+Capability _CAP_DAC_READ_SEARCH_ does allow reading of other users' files, but doesn't
+allow traversing directories or querying for file existence.
+
+Optimally daemon would be run as non-root, however, there doesn't seem to be suitable
+capability to allow iterating directory contents or traversing filesystem while ignoring
+permissions. Such functionality is critical, so daemon runs as _root_.
+
 ## Checking effective capabilities of the service
 
 1. Find PID, `systemctl status spammer-reporter`
 2. Run command: `gawk '/^CapEff/ {print $2}' /proc/<PID-OF-PROCESS>/status | xargs -n1 -I {} capsh --decode={}`
 3. Expected output: `0x0000000020804004=cap_dac_read_search,cap_ipc_lock,cap_sys_nice,cap_audit_write`
+
+Note:
+See man-page for definitions of:
+_Permitted_, _Inheritable_, _Effective_, _Bounding_ and _Ambient_ capability sets.
