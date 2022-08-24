@@ -142,7 +142,7 @@ def main():
             raise ValueError("Need --spamcop-report-address !")
 
         reporter = SpamcopReporter(send_from=args.from_address, send_to=args.spamcop_report_address,
-                                   host=args.args.smtpd_address)
+                                   host=args.smtpd_address)
         if args.spamcop_report_from_stdin:
             log.info("Reporting from STDIN pipe")
             try:
