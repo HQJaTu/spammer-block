@@ -22,7 +22,7 @@ import os
 import sys
 import argparse
 import logging
-from spammer_block_lib import SpamcopReporter
+from spammer_block_lib import SpamcopReporter, ConfigReader
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +39,7 @@ def _setup_logger(log_level_in: str) -> None:
     console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setFormatter(log_formatter)
     console_handler.propagate = False
+    log.handlers.clear()
     log.addHandler(console_handler)
 
     if log_level_in.upper() not in logging._nameToLevel:
@@ -48,6 +49,9 @@ def _setup_logger(log_level_in: str) -> None:
 
     lib_log = logging.getLogger('spammer_block_lib')
     lib_log.setLevel(log_level)
+    lib_log.handlers.clear()
+    lib_log.addHandler(console_handler)
+
 
 
 def dbus_reporter(use_system_bus: bool, filename: str) -> None:
@@ -113,8 +117,28 @@ def main():
                             ', '.join([BUS_SYSTEM, BUS_SESSION])))
     parser.add_argument('--log-level', default="WARNING",
                         help='Set logging level. Python default is: WARNING')
+    parser.add_argument('--config-file',
+                        metavar="TOML-CONFIGURATION-FILE",
+                        help="Configuration Toml-file")
     args = parser.parse_args()
     _setup_logger(args.log_level)
+
+    # Read configuration?
+    if args.config_file:
+        if not os.path.exists(args.config_file):
+            log.error("Given configuration file '{}' doesn't exist!".format(args.config_file))
+            exit(2)
+        log.debug("Reading configuration from: {}".format(args.config_file))
+        config = ConfigReader.config_from_toml_file(args.config_file)
+    else:
+        config = ConfigReader.empty_config()
+
+    # Change log-level?
+    if args.log_level == ConfigReader.DEFAULT_LOG_LEVEL and config['Daemon'][
+        'log_level'] != ConfigReader.DEFAULT_LOG_LEVEL:
+        # --log-level not specified
+        # Toml-configuration has log-level specified. Re-do logging setup.
+        _setup_logger(config['Daemon']['log_level'])
 
     # Spamcop-stuff
     if args.dbus:
@@ -138,11 +162,22 @@ def main():
             parser.print_help()
             exit(1)
 
-        if not args.spamcop_report_address:
-            raise ValueError("Need --spamcop-report-address !")
+        # Merge CLI-arguments
+        if args.from_address != ConfigReader.DEFAULT_FROM_ADDRESS:
+            config['Reporter']['from_address'] = args.from_address
+        if args.spamcop_report_address:
+            config['Reporter']['spamcop_report_address'] = args.spamcop_report_address
+        if args.smtpd_address != ConfigReader.DEFAULT_SMTPD_ADDRESS:
+            config['Reporter']['smtpd_address'] = args.smtpd_address
 
-        reporter = SpamcopReporter(send_from=args.from_address, send_to=args.spamcop_report_address,
-                                   host=args.smtpd_address)
+        # Mandatory argument(s) specified?
+        if not config['Reporter']['spamcop_report_address']:
+            log.error("Need --spamcop-report-address (or --config)")
+            exit(2)
+
+        reporter = SpamcopReporter(send_from=config['Reporter']['from_address'],
+                                   send_to=config['Reporter']['spamcop_report_address'],
+                                   host=config['Reporter']['smtpd_address'])
         if args.spamcop_report_from_stdin:
             log.info("Reporting from STDIN pipe")
             try:
