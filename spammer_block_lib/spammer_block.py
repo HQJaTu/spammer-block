@@ -44,7 +44,7 @@ log = logging.getLogger(__name__)
 
 
 class SpammerBlock:
-    ipinfo_token = None
+    DYNAMIC_AS_NUMBER_REPLACEMENT = '{ASN}'
 
     def __init__(self, datasource: DatasourceBase):
         self._datasource = datasource
@@ -103,7 +103,7 @@ class SpammerBlock:
         :return:
         """
 
-        if asn_json_result_file and '{ASN}' in asn_json_result_file:
+        if asn_json_result_file and self.DYNAMIC_AS_NUMBER_REPLACEMENT in asn_json_result_file:
             asn_json_result_file_to_use = asn_json_result_file.format(ASN=asn)
         else:
             asn_json_result_file_to_use = asn_json_result_file
