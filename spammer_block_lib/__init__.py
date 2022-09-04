@@ -5,6 +5,7 @@ from .outputs import NetworkOutputNone, NetworkOutputJson, NetworkOutputPostfix
 from .spamcop_reporter import SpamcopReporter
 from .gmail_reporter import GmailReporter
 from .sendgrid_reporter import SendgridReporter
+from .config.reader import ConfigReader
 
 NET_LIST_OUTPUT_OPTIONS = {
     'none': NetworkOutputNone,
@@ -14,4 +15,5 @@ NET_LIST_OUTPUT_OPTIONS = {
 
 __all__ = ['SpammerBlock', 'NetworkOutputNone', 'NetworkOutputJson', 'NetworkOutputPostfix',
            'NET_LIST_OUTPUT_OPTIONS',
-           'SpamcopReporter', 'GmailReporter', 'SendgridReporter']
+           'SpamcopReporter', 'GmailReporter', 'SendgridReporter',
+           'ConfigReader']
