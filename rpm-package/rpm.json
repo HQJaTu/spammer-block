@@ -13,8 +13,8 @@
     "license": "GPLv2",
     "name": "spammer-block",
     "summary": "Tool to get CIDRs of a known spammer IP-address by AS-number and report known spam automatically",
-    "version": "0.7.0",
-    "release": "3"
+    "version": "0.7.1",
+    "release": "1"
   },
   "python_venv": {
     "cmd": "python3 -m venv",
@@ -33,6 +33,8 @@
       "2) Automated reporting of spam based on user interaction or block-list"
     ],
     "changelog": [
+      "* Sun Sep 04 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.1-1",
+      "- Improvement on spammer-reporter.py to allow use on --config",
       "* Sun Aug 12 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.0-3",
       "- Added %attr definition to extra files",
       "* Sun Aug 12 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.0-2",
@@ -67,6 +69,16 @@
       {
         "src": "systemd.service/spammer-reporter.service",
         "dest": "usr/lib/systemd/system/spammer-reporter.service"
+      },
+      {
+        "src": "rpm-package/spammer-block",
+        "dest": "usr/bin/spammer-block",
+        "attr": "755, -, -"
+      },
+      {
+        "src": "rpm-package/spammer-reporter",
+        "dest": "usr/bin/spammer-reporter",
+        "attr": "755, -, -"
       }
     ]
   }
