@@ -117,12 +117,13 @@ dbus-send \
 ## UID / GID of the service
 Service is run as _root_.
 
-Capability _CAP_DAC_READ_SEARCH_ does allow reading of other users' files, but doesn't
-allow traversing directories or querying for file existence.
+When running as non-_root_, capability _CAP_DAC_READ_SEARCH_ does allow reading of other users' files,
+but doesn't allow traversing directories or querying for file existence. Thus, basic operation of this
+daemon is unavailable.
 
-Optimally daemon would be run as non-root, however, there doesn't seem to be suitable
+For security reasons, it would be sensible for daemon to run as non-_root_, however, there doesn't seem to be suitable
 capability to allow iterating directory contents or traversing filesystem while ignoring
-permissions. Such functionality is critical, so daemon runs as _root_.
+permissions. Such functionality is critical, feasible options for non-_root_ operation are lacking, so daemon runs as _root_.
 
 ## Checking effective capabilities of the service
 
@@ -133,3 +134,29 @@ permissions. Such functionality is critical, so daemon runs as _root_.
 Note:
 See man-page for definitions of:
 _Permitted_, _Inheritable_, _Effective_, _Bounding_ and _Ambient_ capability sets.
+
+# SElinux
+
+See subdirectory `SElinux/` for details.
+
+## Test run service
+
+* Use SElinux-tool `runcon`. Set _system_u:system_r:spammerblock_t:s0_ as security context.
+
+```bash
+runcon system_u:system_r:spammerblock_t:s0 \
+  /usr/libexec/spammer-block/bin/python \
+  /usr/libexec/spammer-block/bin/spammer-reporter-service.py \
+  system \
+  --config /etc/sysconfig/spammer-reporter.toml
+```
+
+* [runcon(1) - Linux man page](https://linux.die.net/man/1/runcon)
+
+## Temporarily disable all don't audit -rules
+
+```bash
+semodule -DB
+```
+
+Now all possible deny-rules are logged and can be traced with `audit2allow`.

@@ -30,9 +30,9 @@ from gi.repository import GLib
 import asyncio
 import asyncio_glib
 import re
-import toml
 import logging
-from spammer_block_lib import dbus
+from systemd.journal import JournaldLogHandler
+from spammer_block_lib import dbus, ConfigReader
 
 log = logging.getLogger(__name__)
 wd: watchdog = None
@@ -40,11 +40,7 @@ wd: watchdog = None
 BUS_SYSTEM = "system"
 BUS_SESSION = "session"
 
-DEFAULT_SYSTEMD_WATCHDOG_TIME = 5
-DEFAULT_FROM_ADDRESS = "joe.user@example.com"
-DEFAULT_SMTPD_ADDRESS = "127.0.0.1"
 DEFAULT_CONFIG_FILE_NAME = ".spammer-block"
-DEFAULT_LOG_LEVEL = "WARNING"
 
 
 def _setup_logger(log_level_in: str, watchdog=False) -> None:
@@ -55,15 +51,17 @@ def _setup_logger(log_level_in: str, watchdog=False) -> None:
     :return:
     """
     if watchdog:
-        # Running as daemon, Systemd will handle timestamping for us
+        # Running as daemon, Systemd will handle timestamping for us.
+        # Also: daemons may have trouble with stdout / stderr, using journald instead.
+        handler = JournaldLogHandler()
         log_formatter = logging.Formatter("[%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
     else:
         log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
-    console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setFormatter(log_formatter)
-    console_handler.propagate = False
-    log.handlers = []
-    log.addHandler(console_handler)
+        handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(log_formatter)
+    handler.propagate = False
+    log.handlers.clear()
+    log.addHandler(handler)
 
     if log_level_in.upper() not in logging._nameToLevel:
         raise ValueError("Unkown logging level '{}'!".format(log_level_in))
@@ -72,66 +70,8 @@ def _setup_logger(log_level_in: str, watchdog=False) -> None:
 
     lib_log = logging.getLogger('spammer_block_lib')
     lib_log.setLevel(log_level)
-    lib_log.handlers = []
-    lib_log.addHandler(console_handler)
-
-
-def empty_config() -> dict:
-    return {
-        'Reporter': {
-            'from_address': DEFAULT_FROM_ADDRESS,
-            'spamcop_report_address': None,
-            'smtpd_address': DEFAULT_SMTPD_ADDRESS
-        },
-        'Daemon': {
-            'watchdog_time': DEFAULT_SYSTEMD_WATCHDOG_TIME,
-            'maildir_base': None,
-            'log_level': "WARNING",
-            'force_root_override': False
-        }
-    }
-
-
-def config_from_toml_file(filename: str) -> dict:
-    """
-    Read configuration file.
-    Note: Values from config can be missing or overwritten via command-line arguments.
-    :param filename:
-    :return: dictionary of configuration
-    """
-    toml_path = os.path.abspath(filename)
-    with open(toml_path, "r", encoding="utf-8") as f:
-        toml_string = f.read()
-    parsed_toml = toml.loads(toml_string)
-
-    # Sanity:
-    known_keys = empty_config()
-    for key in parsed_toml:
-        if key not in known_keys:
-            raise ValueError("Unknown key '{}' in Toml-file {}!".format(key, filename))
-        for subkey in parsed_toml[key]:
-            if subkey not in known_keys[key]:
-                raise ValueError("Unknown key '{}.{}' in Toml-file {}!".format(key, subkey, filename))
-
-    # Add directory of .toml file
-    toml_dir = os.path.dirname(toml_path)
-    parsed_toml["toml_dir"] = toml_dir
-
-    # Merge empty config with parsed config.
-    # NOTE: This won't work!
-    # See: https://stackoverflow.com/a/26853961/1548275
-    # config_out = {**known_keys, **parsed_toml}
-    # Will merge subkey incorrectly. Need to walk the entire tree.
-    config_out = {}
-    for key in known_keys:
-        config_out[key] = {}
-        for subkey in known_keys[key]:
-            if subkey in parsed_toml[key]:
-                config_out[key][subkey] = parsed_toml[key][subkey]
-            else:
-                config_out[key][subkey] = known_keys[key][subkey]
-
-    return config_out
+    lib_log.handlers.clear()
+    lib_log.addHandler(handler)
 
 
 def gather_mailboxes_to_watch(maildir_base: str, force_root_override: bool, use_sssd: bool) -> list:
@@ -275,22 +215,22 @@ def main() -> None:
     parser = argparse.ArgumentParser(description='Spam Email Reporter daemon')
     parser.add_argument('bus_type', metavar='BUS-TYPE-TO-USE', choices=[BUS_SYSTEM, BUS_SESSION],
                         help="D-bus type to use. Choices: {}".format(', '.join([BUS_SYSTEM, BUS_SESSION])))
-    parser.add_argument('--from-address', default=DEFAULT_FROM_ADDRESS,
+    parser.add_argument('--from-address', default=ConfigReader.DEFAULT_FROM_ADDRESS,
                         help="Send mail to Spamcop using given sender address. Default: {}".format(
-                            DEFAULT_FROM_ADDRESS))
-    parser.add_argument('--smtpd-address', default=DEFAULT_SMTPD_ADDRESS,
-                        help="Send mail using SMTPd at address. Default: {}".format(DEFAULT_SMTPD_ADDRESS))
+                            ConfigReader.DEFAULT_FROM_ADDRESS))
+    parser.add_argument('--smtpd-address', default=ConfigReader.DEFAULT_SMTPD_ADDRESS,
+                        help="Send mail using SMTPd at address. Default: {}".format(ConfigReader.DEFAULT_SMTPD_ADDRESS))
     parser.add_argument('--spamcop-report-address', metavar="REPORT-ADDRESS",
                         help="Report to Spamcop using given address")
     parser.add_argument('--watchdog-time', type=int,
-                        default=DEFAULT_SYSTEMD_WATCHDOG_TIME,
+                        default=ConfigReader.DEFAULT_SYSTEMD_WATCHDOG_TIME,
                         help="How often systemd watchdog is notified. "
-                             "Default: {} seconds".format(DEFAULT_SYSTEMD_WATCHDOG_TIME))
+                             "Default: {} seconds".format(ConfigReader.DEFAULT_SYSTEMD_WATCHDOG_TIME))
     parser.add_argument('--maildir-base',
                         help="For every user, email is delivered into Maildir. "
                              "Per-user base directory name. Default: none")
-    parser.add_argument('--log-level', default=DEFAULT_LOG_LEVEL,
-                        help='Set logging level. Python default is: {}'.format(DEFAULT_LOG_LEVEL))
+    parser.add_argument('--log-level', default=ConfigReader.DEFAULT_LOG_LEVEL,
+                        help='Set logging level. Python default is: {}'.format(ConfigReader.DEFAULT_LOG_LEVEL))
     parser.add_argument('--config-file',
                         metavar="TOML-CONFIGURATION-FILE",
                         help="Configuration Toml-file")
@@ -311,28 +251,29 @@ def main() -> None:
             log.error("Given configuration file '{}' doesn't exist!".format(args.config_file))
             exit(2)
         log.debug("Reading configuration from: {}".format(args.config_file))
-        config = config_from_toml_file(args.config_file)
+        config = ConfigReader.config_from_toml_file(args.config_file)
     else:
-        config = empty_config()
+        config = ConfigReader.empty_config()
 
     # Watchdog
     global wd
     wd = watchdog()
 
     # Change log-level?
-    if wd.is_enabled or (args.log_level == DEFAULT_LOG_LEVEL and config['Daemon']['log_level'] != DEFAULT_LOG_LEVEL):
+    if wd.is_enabled or (args.log_level == ConfigReader.DEFAULT_LOG_LEVEL and
+                         config['Daemon']['log_level'] != ConfigReader.DEFAULT_LOG_LEVEL):
         # --log-level not specified
         # Toml-configuration has log-level specified. Re-do logging setup.
         _setup_logger(config['Daemon']['log_level'], watchdog=wd.is_enabled)
 
     # Merge CLI-arguments
-    if args.from_address != DEFAULT_FROM_ADDRESS:
+    if args.from_address != ConfigReader.DEFAULT_FROM_ADDRESS:
         config['Reporter']['from_address'] = args.from_address
     if args.spamcop_report_address:
         config['Reporter']['spamcop_report_address'] = args.spamcop_report_address
-    if args.smtpd_address != DEFAULT_SMTPD_ADDRESS:
+    if args.smtpd_address != ConfigReader.DEFAULT_SMTPD_ADDRESS:
         config['Reporter']['smtpd_address'] = args.smtpd_address
-    if args.watchdog_time != DEFAULT_SYSTEMD_WATCHDOG_TIME:
+    if args.watchdog_time != ConfigReader.DEFAULT_SYSTEMD_WATCHDOG_TIME:
         config['Daemon']['watchdog_time'] = args.watchdog_time
     if args.maildir_base:
         config['Daemon']['maildir_base'] = args.maildir_base

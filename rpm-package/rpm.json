@@ -14,7 +14,7 @@
     "name": "spammer-block",
     "summary": "Tool to get CIDRs of a known spammer IP-address by AS-number and report known spam automatically",
     "version": "0.7.1",
-    "release": "1"
+    "release": "4"
   },
   "python_venv": {
     "cmd": "python3 -m venv",
@@ -33,12 +33,21 @@
       "2) Automated reporting of spam based on user interaction or block-list"
     ],
     "changelog": [
+      "* Mon Sep 26 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.1-4",
+      "- Attempt to get SElinux and logging to work",
+      "* Sun Sep 25 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.1-3",
+      "- Using Journald-logging when running as daemon",
+      "* Sun Sep 04 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.1-2",
+      "- Bugfix on spammer-block help-text to correctly document {ASN} usage",
       "* Sun Sep 04 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.1-1",
       "- Improvement on spammer-reporter.py to allow use on --config",
       "* Sun Aug 12 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.0-3",
       "- Added %attr definition to extra files",
       "* Sun Aug 12 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.0-2",
       "- Added force_root_override into Toml-configuration"
+    ],
+    "post": [
+      "semanage fcontext -a -t spammerblock_exec_t /usr/libexec/spammer-block/bin/python"
     ]
   },
   "macros": {
