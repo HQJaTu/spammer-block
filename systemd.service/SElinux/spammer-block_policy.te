@@ -1,0 +1,117 @@
+# Type Enforcement .te file
+policy_module(spammer-block_policy, 1.0.0);
+
+# Docs:
+# https://selinuxproject.org/page/ObjectClassesPerms
+
+require {
+	type home_root_t;
+	type user_home_dir_t;
+	type user_devpts_t;
+	type system_dbusd_t;
+	type system_dbusd_var_run_t;
+	type kernel_t;
+	type node_t;
+	type passwd_file_t;
+	type sssd_public_t;
+	type sssd_t;
+	type sssd_var_lib_t;
+	type tmp_t;
+	type user_home_t;
+	type bin_t;
+	type security_t;
+	type sysctl_fs_t;
+	type tmpfs_t;
+	type shell_exec_t;
+	type var_run_t;
+	type etc_runtime_t;
+	type var_t;
+	type init_var_run_t;
+	type net_conf_t;
+	type smtp_port_t;
+	type device_t;
+	type syslogd_var_run_t;
+	class capability { dac_read_search };
+	class dir { search };
+	class file { execute setattr read lock create execute_no_trans write getattr unlink append };
+	class dbus { acquire_svc send_msg };
+	class tcp_socket { node_bind };
+	class unix_dgram_socket { create sendto getattr };
+	class unix_stream_socket { connectto sendto };
+	class sock_file { sendto getattr read write open };
+}
+
+type spammerblock_t;
+type spammerblock_exec_t;
+
+domain_type(spammerblock_t)
+init_daemon_domain(spammerblock_t, spammerblock_exec_t)
+
+# XXX
+# Enforcing? Permissive?
+#permissive spammerblock_t;
+
+########################################
+#
+# spammer-reporter-service local policy
+#
+
+#============= init_t ==============
+allow init_t spammerblock_t:dbus { send_msg };
+
+#============= spammerblock_t ==============
+allow spammerblock_t self:capability { dac_read_search };
+allow spammerblock_t self:dbus { send_msg };
+allow spammerblock_t self:tcp_socket { bind create connect read write };
+allow spammerblock_t self:unix_dgram_socket { create getattr getopt setopt write };
+allow spammerblock_t system_dbusd_t:dbus { acquire_svc send_msg };
+allow spammerblock_t system_dbusd_t:unix_stream_socket { connectto sendto };
+allow spammerblock_t system_dbusd_var_run_t:dir { search };
+allow spammerblock_t init_var_run_t:sock_file { sendto read write open };
+
+allow spammerblock_t net_conf_t:file { getattr open read };
+allow spammerblock_t smtp_port_t:tcp_socket { name_connect };
+
+allow spammerblock_t bin_t:file { map execute execute_no_trans };
+allow spammerblock_t shell_exec_t:file { map execute execute_no_trans };
+allow spammerblock_t sssd_public_t:file { map getattr open read };
+allow spammerblock_t tmp_t:file { map create unlink write execute };
+
+allow spammerblock_t init_t:dbus { send_msg };
+allow spammerblock_t kernel_t:unix_dgram_socket { sendto };
+allow spammerblock_t node_t:tcp_socket { node_bind };
+allow spammerblock_t passwd_file_t:file { getattr open read };
+
+allow spammerblock_t sssd_public_t:dir { search };
+allow spammerblock_t sssd_t:unix_stream_socket { connectto sendto };
+allow spammerblock_t sssd_var_lib_t:dir { search };
+allow spammerblock_t sssd_var_lib_t:sock_file { write };
+allow spammerblock_t tmp_t:dir { add_name remove_name write };
+
+allow spammerblock_t user_home_dir_t:dir { getattr search };
+allow spammerblock_t user_home_t:dir { getattr read search };
+allow spammerblock_t user_home_t:file { ioctl open read };
+allow spammerblock_t user_home_t:lnk_file read;
+
+allow spammerblock_t security_t:dir { write add_name };
+allow spammerblock_t security_t:file { create };
+allow spammerblock_t sysctl_fs_t:dir { search };
+allow spammerblock_t tmpfs_t:dir { write add_name };
+allow spammerblock_t var_run_t:dir { write add_name };
+allow spammerblock_t var_t:dir { write };
+allow spammerblock_t etc_runtime_t:dir { write };
+
+# Stdout / Stderr:
+# setsebool allow_daemons_use_tty on
+#domain_use_interactive_fds(spammerblock_t)
+
+#allow spammerblock_t device_t:dir { getattr ioctl lock open read search };
+#allow spammerblock_t device_t:dir { getattr open search };
+#allow spammerblock_t device_t:lnk_file { getattr read };
+#allow spammerblock_t device_t:dir { getattr ioctl lock open read search };
+#allow spammerblock_t device_t:dir { getattr open search };
+#allow spammerblock_t device_t:lnk_file { getattr read };
+allow spammerblock_t user_devpts_t:chr_file { append read write };
+
+# Journald
+allow spammerblock_t syslogd_var_run_t:dir search;
