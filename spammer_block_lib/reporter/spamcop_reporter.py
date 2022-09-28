@@ -10,12 +10,13 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import COMMASPACE, formatdate
+from .abstract import ReporterAbstract
 import logging
 
 log = logging.getLogger(__name__)
 
 
-class SpamcopReporter:
+class SpamcopReporter(ReporterAbstract):
 
     def __init__(self, send_from: str, send_to: Union[str, list], host: str = "127.0.0.1"):
         """

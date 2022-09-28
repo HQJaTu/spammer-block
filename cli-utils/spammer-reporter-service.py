@@ -170,20 +170,18 @@ def _systemd_mock_watchdog() -> bool:
     return True
 
 
-def monitor_dbus(use_system_bus: bool, watchdog_time: int,
-                 send_from: str, send_to: str, smtpd_host: str,
-                 maildir_base: str,
-                 force_root_override: bool, use_sssd: bool) -> None:
+def monitor_dbus(use_system_bus: bool, config: dict, use_sssd: bool) -> None:
+    watchdog_time = config['Daemon']['watchdog_time']
+    maildir_base = config['Daemon']['maildir_base']
+    force_root_override = config['Daemon']['force_root_override']
+
     # DBusGMainLoop(set_as_default=True)
     dbus_loop = DBusGMainLoop()
     asyncio.set_event_loop_policy(asyncio_glib.GLibEventLoopPolicy())
     asyncio_loop = asyncio.get_event_loop()
 
     # Publish the interactive service into D-Bus
-    dbus.SpamReporterService(
-        use_system_bus,
-        send_from, send_to, dbus_loop, smtpd_host
-    )
+    dbus.SpamReporterService(use_system_bus, dbus_loop, config)
 
     # Systemd watchdog?
     if wd.is_enabled:
@@ -287,12 +285,7 @@ def main() -> None:
     log.info('Starting up ...')
     monitor_dbus(
         using_system_bus,
-        config['Daemon']['watchdog_time'],
-        config['Reporter']['from_address'],
-        config['Reporter']['spamcop_report_address'],
-        config['Reporter']['smtpd_address'],
-        config['Daemon']['maildir_base'],
-        config['Daemon']['force_root_override'],
+        config,
         False
     )
 

@@ -21,7 +21,7 @@ import os
 from typing import Union
 from dbus import (SessionBus, SystemBus, service, mainloop)
 from pwd import getpwuid
-from spammer_block_lib import SpamcopReporter
+from spammer_block_lib import reporter as spam_reporters
 import logging
 
 log = logging.getLogger(__name__)
@@ -36,9 +36,8 @@ class SpamReporterService(service.Object):
     OPATH = "/" + "/".join(SPAM_REPORTER_SERVICE)
 
     def __init__(self, use_system_bus: bool,
-                 send_from: str, send_to: Union[str, list],
                  loop: mainloop.NativeMainLoop,
-                 smtpd_host: str = "127.0.0.1"):
+                 config: dict):
         # Which bus to use for publishing?
         self._use_system_bus = use_system_bus
         if use_system_bus:
@@ -55,9 +54,7 @@ class SpamReporterService(service.Object):
         service.Object.__init__(self, bus_name, self.OPATH)
 
         self._loop = loop
-        self.from_address = send_from
-        self.spamcop_report_address = send_to
-        self.smtpd_host = smtpd_host
+        self.config = config
 
     # noinspection PyPep8Naming
     @service.method(dbus_interface=SPAM_REPORTER_SERVICE_BUS_NAME,
@@ -111,11 +108,9 @@ class SpamReporterService(service.Object):
         :param filename, str, filename of spam mail in RFC822 format
         :return: str, constant "ok"
         """
-        reporter = SpamcopReporter(
-            send_from=self.from_address,
-            send_to=self.spamcop_report_address,
-            host=self.smtpd_host
-        )
+        reporter = spam_reporters.SpamcopReporter(send_from=self.config['Reporter']['from_address'],
+                                                  send_to=self.config['Reporter']['spamcop_report_address'],
+                                                  host=self.config['Reporter']['smtpd_address'])
         log.info("D-Bus service reporting file: {} to SpamCop".format(filename))
         if not os.path.exists(filename):
             log.error("Input file {} doesn't exist!".format(filename))

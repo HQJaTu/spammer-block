@@ -22,7 +22,7 @@ import os
 import sys
 import argparse
 import logging
-from spammer_block_lib import SpamcopReporter, ConfigReader
+from spammer_block_lib import ConfigReader, reporter as spam_reporters
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +51,6 @@ def _setup_logger(log_level_in: str) -> None:
     lib_log.setLevel(log_level)
     lib_log.handlers.clear()
     lib_log.addHandler(console_handler)
-
 
 
 def dbus_reporter(use_system_bus: bool, filename: str) -> None:
@@ -134,13 +133,12 @@ def main():
         config = ConfigReader.empty_config()
 
     # Change log-level?
-    if args.log_level == ConfigReader.DEFAULT_LOG_LEVEL and config['Daemon'][
-        'log_level'] != ConfigReader.DEFAULT_LOG_LEVEL:
+    if (args.log_level == ConfigReader.DEFAULT_LOG_LEVEL and
+            config['Daemon']['log_level'] != ConfigReader.DEFAULT_LOG_LEVEL):
         # --log-level not specified
         # Toml-configuration has log-level specified. Re-do logging setup.
         _setup_logger(config['Daemon']['log_level'])
 
-    # Spamcop-stuff
     if args.dbus:
         if args.dbus == BUS_SYSTEM:
             using_system_bus = True
@@ -149,11 +147,12 @@ def main():
         else:
             raise ValueError("Internal: Which bus?")
 
+        # Spamcop-stuff
         if not args.spamcop_report_from_file:
             log.warning("D-Bus must use --spamcop-report-from-file")
             exit(1)
         if not os.path.exists(args.spamcop_report_from_file):
-            log.error("File %s doesn't exist!" % args.spamcop_report_from_file)
+            log.error("File {} doesn't exist!".format(args.spamcop_report_from_file))
             exit(1)
         dbus_reporter(using_system_bus, args.spamcop_report_from_file)
     else:
@@ -175,9 +174,9 @@ def main():
             log.error("Need --spamcop-report-address (or --config)")
             exit(2)
 
-        reporter = SpamcopReporter(send_from=config['Reporter']['from_address'],
-                                   send_to=config['Reporter']['spamcop_report_address'],
-                                   host=config['Reporter']['smtpd_address'])
+        reporter = spam_reporters.SpamcopReporter(send_from=config['Reporter']['from_address'],
+                                                  send_to=config['Reporter']['spamcop_report_address'],
+                                                  host=config['Reporter']['smtpd_address'])
         if args.spamcop_report_from_stdin:
             log.info("Reporting from STDIN pipe")
             try:
@@ -185,9 +184,9 @@ def main():
             except Exception:
                 log.exception("Reporting failed!")
         elif args.spamcop_report_from_file:
-            log.info("Reporting file: %s" % args.spamcop_report_from_file)
+            log.info("Reporting file: {}".format(args.spamcop_report_from_file))
             if not os.path.exists(args.spamcop_report_from_file):
-                log.error("File %s doesn't exist!" % args.spamcop_report_from_file)
+                log.error("File {} doesn't exist!".format(args.spamcop_report_from_file))
                 exit(1)
             try:
                 reporter.report_files([args.spamcop_report_from_file])

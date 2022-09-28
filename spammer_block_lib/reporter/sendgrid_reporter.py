@@ -4,12 +4,13 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import COMMASPACE, formatdate
+from .abstract import ReporterAbstract
 import logging
 
 log = logging.getLogger(__name__)
 
 
-class SendgridReporter:
+class SendgridReporter(ReporterAbstract):
     ABUSE_EMAIL = r"abuse@sendgrid.com"
 
     def __init__(self, send_from: str, host: str = "127.0.0.1"):
@@ -36,6 +37,9 @@ class SendgridReporter:
 
         self._send_message(msg)
         log.debug("Sendgrid reporter reporting spam from string of length {} characters".format(len(message)))
+
+    def report_files(self, files: list) -> None:
+        raise NotImplementedError("Not yet!")
 
     def _create_message(self) -> MIMEMultipart:
         msg = MIMEMultipart()

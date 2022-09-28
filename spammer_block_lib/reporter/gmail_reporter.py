@@ -1,12 +1,13 @@
 import os
 import sys
 import requests
+from .abstract import ReporterAbstract
 import logging
 
 log = logging.getLogger(__name__)
 
 
-class GmailReporter:
+class GmailReporter(ReporterAbstract):
     ABUSE_URL = r"https://support.google.com/mail/contact/abuse"
 
     def __init__(self):
