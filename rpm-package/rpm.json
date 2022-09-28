@@ -13,8 +13,8 @@
     "license": "GPLv2",
     "name": "spammer-block",
     "summary": "Tool to get CIDRs of a known spammer IP-address by AS-number and report known spam automatically",
-    "version": "0.7.1",
-    "release": "4"
+    "version": "0.8.0",
+    "release": "1"
   },
   "python_venv": {
     "cmd": "python3 -m venv",
@@ -33,6 +33,12 @@
       "2) Automated reporting of spam based on user interaction or block-list"
     ],
     "changelog": [
+      "* Wed Sep 28 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.0-1",
+      "- Fully tested and working Systemd daemon",
+      "* Wed Sep 28 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.2-2",
+      "- With configuration, it is possible to report spam to a mock reporting service",
+      "* Wed Sep 28 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.2-1",
+      "- Refactored D-Bus service to use configuration",
       "* Mon Sep 26 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.1-4",
       "- Attempt to get SElinux and logging to work",
       "* Sun Sep 25 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.1-3",
