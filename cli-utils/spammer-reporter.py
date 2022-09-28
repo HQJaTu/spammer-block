@@ -106,13 +106,15 @@ def main():
                         help="Send mail using SMTPd at address. Default: {}".format(DEFAULT_SMTPD_ADDRESS))
     parser.add_argument('--spamcop-report-address', metavar="REPORT-ADDRESS",
                         help="Report to Spamcop using given address")
-    parser.add_argument('--spamcop-report-from-stdin', action="store_true",
-                        help="Read email from STDIN and report it as spam into Spamcop")
-    parser.add_argument('--spamcop-report-from-file', metavar="FILENAME",
-                        help="Read email from a RFC2822 file and report it as spam into Spamcop")
+    parser.add_argument('--mock-report-address', metavar="REPORT-ADDRESS",
+                        help="Report to given e-mail address. Simulate reporting for test purposes.")
+    parser.add_argument('--report-from-stdin', action="store_true",
+                        help="Read email from STDIN and report it as spam")
+    parser.add_argument('--report-from-file', metavar="FILENAME",
+                        help="Read email from a RFC2822 file and report it as spam")
     parser.add_argument('--dbus', metavar='BUS-TYPE-TO-USE', choices=[BUS_SYSTEM, BUS_SESSION],
                         help="Use D-Bus for reporting. Ignoring all arguments, "
-                             "except must use --spamcop-report-from-file. Choices: {}".format(
+                             "except must use --report-from-file. Choices: {}".format(
                             ', '.join([BUS_SYSTEM, BUS_SESSION])))
     parser.add_argument('--log-level', default="WARNING",
                         help='Set logging level. Python default is: WARNING')
@@ -148,15 +150,15 @@ def main():
             raise ValueError("Internal: Which bus?")
 
         # Spamcop-stuff
-        if not args.spamcop_report_from_file:
-            log.warning("D-Bus must use --spamcop-report-from-file")
+        if not args.report_from_file:
+            log.warning("D-Bus must use --report-from-file")
             exit(1)
-        if not os.path.exists(args.spamcop_report_from_file):
-            log.error("File {} doesn't exist!".format(args.spamcop_report_from_file))
+        if not os.path.exists(args.report_from_file):
+            log.error("File {} doesn't exist!".format(args.report_from_file))
             exit(1)
-        dbus_reporter(using_system_bus, args.spamcop_report_from_file)
+        dbus_reporter(using_system_bus, args.report_from_file)
     else:
-        if not args.spamcop_report_from_stdin and not args.spamcop_report_from_file:
+        if not args.report_from_stdin and not args.report_from_file:
             log.warning("No arguments given. Printing help.")
             parser.print_help()
             exit(1)
@@ -170,32 +172,37 @@ def main():
             config['Reporter']['smtpd_address'] = args.smtpd_address
 
         # Mandatory argument(s) specified?
-        if not config['Reporter']['spamcop_report_address']:
-            log.error("Need --spamcop-report-address (or --config)")
+        if config['Reporter']['spamcop_report_address']:
+            reporter = spam_reporters.SpamcopReporter(send_from=config['Reporter']['from_address'],
+                                                      send_to=config['Reporter']['spamcop_report_address'],
+                                                      host=config['Reporter']['smtpd_address'])
+        elif config['Reporter']['mock_report_address']:
+            reporter = spam_reporters.MockReporter(send_from=config['Reporter']['from_address'],
+                                                   send_to=config['Reporter']['mock_report_address'],
+                                                   host=config['Reporter']['smtpd_address'])
+        else:
+            log.error("Need --spamcop-report-address or --mock-report-address (or --config)")
             exit(2)
 
-        reporter = spam_reporters.SpamcopReporter(send_from=config['Reporter']['from_address'],
-                                                  send_to=config['Reporter']['spamcop_report_address'],
-                                                  host=config['Reporter']['smtpd_address'])
-        if args.spamcop_report_from_stdin:
+        if args.report_from_stdin:
             log.info("Reporting from STDIN pipe")
             try:
                 reporter.report_stdin()
             except Exception:
                 log.exception("Reporting failed!")
-        elif args.spamcop_report_from_file:
-            log.info("Reporting file: {}".format(args.spamcop_report_from_file))
-            if not os.path.exists(args.spamcop_report_from_file):
-                log.error("File {} doesn't exist!".format(args.spamcop_report_from_file))
+        elif args.report_from_file:
+            log.info("Reporting file: {}".format(args.report_from_file))
+            if not os.path.exists(args.report_from_file):
+                log.error("File {} doesn't exist!".format(args.report_from_file))
                 exit(1)
             try:
-                reporter.report_files([args.spamcop_report_from_file])
+                reporter.report_files([args.report_from_file])
             except Exception:
                 log.exception("Reporting failed!")
         else:
             raise NotImplementedError("What? Internal logic failure.")
 
-    log.info("Done SpamCop reporting")
+    log.info("Done spam reporting")
     exit(0)
 
 

@@ -277,8 +277,8 @@ def main() -> None:
         config['Daemon']['maildir_base'] = args.maildir_base
 
     # Mandatory argument(s) specified?
-    if not config['Reporter']['spamcop_report_address']:
-        log.error("Need --spamcop-report-address (or --config)")
+    if not config['Reporter']['spamcop_report_address'] and not config['Reporter']['mock_report_address']:
+        log.error("Need --spamcop-report-address or --mock-report-address (or --config)")
         exit(2)
 
     # Go run the daemon

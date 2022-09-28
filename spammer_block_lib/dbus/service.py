@@ -108,10 +108,19 @@ class SpamReporterService(service.Object):
         :param filename, str, filename of spam mail in RFC822 format
         :return: str, constant "ok"
         """
-        reporter = spam_reporters.SpamcopReporter(send_from=self.config['Reporter']['from_address'],
-                                                  send_to=self.config['Reporter']['spamcop_report_address'],
-                                                  host=self.config['Reporter']['smtpd_address'])
-        log.info("D-Bus service reporting file: {} to SpamCop".format(filename))
+        if self.config['Reporter']['spamcop_report_address']:
+            reporter = spam_reporters.SpamcopReporter(send_from=self.config['Reporter']['from_address'],
+                                                      send_to=self.config['Reporter']['spamcop_report_address'],
+                                                      host=self.config['Reporter']['smtpd_address'])
+            log.info("D-Bus service reporting file: {} to SpamCop".format(filename))
+        elif self.config['Reporter']['mock_report_address']:
+            reporter = spam_reporters.MockReporter(send_from=self.config['Reporter']['from_address'],
+                                                   send_to=self.config['Reporter']['mock_report_address'],
+                                                   host=self.config['Reporter']['smtpd_address'])
+            log.info("D-Bus service reporting file: {} to mock service".format(filename))
+        else:
+            raise RuntimeError("Aow come on! Need a back-end to work with.")
+
         if not os.path.exists(filename):
             log.error("Input file {} doesn't exist!".format(filename))
 

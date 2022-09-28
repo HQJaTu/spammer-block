@@ -13,8 +13,9 @@ class ConfigReader:
         return {
             'Reporter': {
                 'from_address': ConfigReader.DEFAULT_FROM_ADDRESS,
+                'smtpd_address': ConfigReader.DEFAULT_SMTPD_ADDRESS,
                 'spamcop_report_address': None,
-                'smtpd_address': ConfigReader.DEFAULT_SMTPD_ADDRESS
+                'mock_report_address': None,
             },
             'Daemon': {
                 'watchdog_time': ConfigReader.DEFAULT_SYSTEMD_WATCHDOG_TIME,
