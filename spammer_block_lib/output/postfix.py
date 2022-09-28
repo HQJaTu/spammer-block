@@ -21,6 +21,7 @@ from .abstract import NetworkOutputAbstract
 
 class NetworkOutputPostfix(NetworkOutputAbstract):
     DEFAULT_POSTFIX_RULE = "554 Go away spammer!"
+    DYNAMIC_AS_NUMBER_REPLACEMENT = '{ASN}'
 
     def __init__(self, rule: str = DEFAULT_POSTFIX_RULE):
         self.rule = rule
@@ -39,7 +40,7 @@ class NetworkOutputPostfix(NetworkOutputAbstract):
         report += "# AS{} has following nets:\n".format(asn)
 
         rule = self.rule
-        if '{ASN}' in self.rule:
+        if self.DYNAMIC_AS_NUMBER_REPLACEMENT in self.rule:
             rule = self.rule.format(ASN=asn)
         format_max_net_len = 0
         for net, net_data in nets.items():

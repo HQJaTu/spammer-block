@@ -10,11 +10,22 @@ AS-number for given IP-address and listing all CIDRs associated with the given A
 Thus, we get a complete map of the network neighbourhood via single address.
 
 ## Installation
+
+### From RPM
+1. For downloaded or built RPM: `rpm --freshen -h spammer-block-0.7.1-2.x86_64.rpm`
+2. Done!
+
+### From Git
 1. Git clone
-1. Install:
+2. (optional for development) `python -m venv <directory for virtual env>`
+3. Install dependencies, libraries and CLI-utilities:
 ```bash
 pip install .
 ```
+4. Done!
+
+### D-Bus
+See directory `systemd.service/` for details on daemon-based reporting.
 
 ### ipwhois-library
 For querying ASN-data, there is a dependency into https://pypi.org/project/ipwhois/.
@@ -27,6 +38,7 @@ using commercial https://ipinfo.io/ for ASN-queries. That query will return full
 Limit: A non-paid API of ipinfo.ip will serve 5 ASN-queries / day / IP-address.
 
 ## Usage
+* Spammer block:
 ```text
 usage: spammer-block.py [-h] [--asn ASN] [--skip-overlapping]
                         [--output-format OUTPUT_FORMAT]
@@ -54,6 +66,7 @@ optional arguments:
                         CIDR-table rule to apply for a net.
                         Dynamic AS-number assignment with "{ASN}".
                         Default: "554 Go away spammer!"
+                        Example: "PREPEND X-Spam-ASN: AS{ASN}"
   --log-level LOG_LEVEL
                         Set logging level. Python default is: WARNING
   --ipinfo-token IPINFO_TOKEN
@@ -61,6 +74,7 @@ optional arguments:
   --asn-result-json-file ASN_RESULT_JSON_FILE
                         To conserve ASN-queries, save query result
                         or use existing result from a previous query.
+                        Dynamic AS-number assignment with "{ASN}".
 ```
 
 ## Postfix configuration
@@ -77,9 +91,11 @@ smtpd_client_restrictions =
 File `/etc/postfix/client_checks.cidr` will contain listings of all known spammers' networks.
 
 ## Example:
+
+### Simple
 Default output is in Postfix-configuration format.
 ```text
-$ ./spammer-block.py 185.162.126.236
+$ spammer-block 185.162.126.236
 # Confirmed spam from IP: 185.162.126.236
 # AS56378 has following nets:
 31.133.100.0/24         554 Go away spammer!    # O.M.C. COMPUTERS & COMMUNICATIONS LTD (CLOUDWEBMANAGE-IL-JR)
@@ -90,6 +106,25 @@ $ ./spammer-block.py 185.162.126.236
 185.162.126.0/24        554 Go away spammer!    # O.M.C. COMPUTERS & COMMUNICATIONS LTD (IL-OMC-20160808)
 ```
 
+### Advanced
+Instead of instructing Postfix to block spam, let all spam pass,
+but add new mail header to indicate classification as spam and spam origin.
+Additionally, cache IPinfo.io response JSON-data into a file to save on outgoing requests.
+Their limit is 5 per day from single IPv4.
+```text
+$ spammer-block 185.162.126.236 \
+  --postfix-rule "PREPEND X-Spam-ASN: AS{ASN}" \
+  --asn-result-json-file "/tmp/AS{ASN}.json"
+# Confirmed spam from IP: 185.162.126.236
+# AS56378 has following nets:
+31.133.100.0/24         PREPEND X-Spam-ASN: AS44709     # O.M.C. COMPUTERS & COMMUNICATIONS LTD
+31.133.103.0/24         PREPEND X-Spam-ASN: AS44709     # O.M.C. COMPUTERS & COMMUNICATIONS LTD (CLOUDWEBMANAGE-IL-JR)
+103.89.140.0/24         PREPEND X-Spam-ASN: AS44709     # Nsof Networks Ltd (NSOFNETWORKSLTD-AP)
+162.251.146.0/24        PREPEND X-Spam-ASN: AS44709     # Cloud Web Manage (CLOUDWEBMANAGE)
+185.162.125.0/24        PREPEND X-Spam-ASN: AS44709     # O.M.C. COMPUTERS & COMMUNICATIONS LTD (IL-OMC-20160808)
+185.162.126.0/24        PREPEND X-Spam-ASN: AS44709     # O.M.C. COMPUTERS & COMMUNICATIONS LTD
+```
+
 # Spammer reporter
 
 Utility `spammer-reporter.py` is used to report received email to organization
@@ -97,14 +132,23 @@ fighting against spam. An example of one would be [SpamCop](https://www.spamcop.
 
 ## Usage
 ```text
-usage: spammer-reporter.py [-h] [--spamcop-report-address REPORT-ADDRESS]
+usage: spammer-reporter.py [-h] [--from-address FROM_ADDRESS]
+                           [--smtpd-address SMTPD_ADDRESS]
+                           [--spamcop-report-address REPORT-ADDRESS]
                            [--spamcop-report-from-stdin]
                            [--spamcop-report-from-file FILENAME]
+                           [--dbus BUS-TYPE-TO-USE] [--log-level LOG_LEVEL]
+                           [--config-file TOML-CONFIGURATION-FILE]
 
 Report received email as spam
 
 optional arguments:
   -h, --help            show this help message and exit
+  --from-address FROM_ADDRESS
+                        Send mail to Spamcop using given sender address.
+                        Default: joe.user@example.com
+  --smtpd-address SMTPD_ADDRESS
+                        Send mail using SMTPd at address. Default: 127.0.0.1
   --spamcop-report-address REPORT-ADDRESS
                         Report to Spamcop using given address
   --spamcop-report-from-stdin
@@ -113,23 +157,20 @@ optional arguments:
   --spamcop-report-from-file FILENAME
                         Read email from a RFC2822 file and report it as spam
                         into Spamcop
+  --dbus BUS-TYPE-TO-USE
+                        Use D-Bus for reporting. Ignoring all arguments,
+                        except must use --spamcop-report-from-file. Choices:
+                        system, session
+  --log-level LOG_LEVEL
+                        Set logging level. Python default is: WARNING
+  --config-file TOML-CONFIGURATION-FILE
+                        Configuration Toml-file
 ```
 
-## Example 1: Manual reporting from Maildir
+## Example: Manual reporting from Maildir
 Any identified email from a Maildir stored file can be reported by running following command:
 ```bash
-$ spammer-reporter.py \
+$ spammer-reporter \
   --spamcop-report-address submit.-your-id-here-@spam.spamcop.net \
   --spamcop-report-from-file Mail/cur/-the-mail-file-here-
 ```
-
-## Example 2: Procmail-based forwarding
-Automated reporting of known spam with obsoleted [Procmail](https://wiki2.dovecot.org/procmail).
-
-Have `.procmailrc` contain match rule and action:
-```text
-| /usr/local/bin/spammer-reporter.py --spamcop-report-address submit.-your-id-here-@spam.spamcop.net --spamcop-report-from-stdin
-```
-
-Note: Assuming `pip install` would place command `spammer-reporter.py` into directory `/usr/local/bin/`.
-Check your environment for exact details.

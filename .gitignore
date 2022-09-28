@@ -1,3 +1,10 @@
+# SElinux
+systemd.service/SElinux/tmp/
+systemd.service/SElinux/*.pp
+
+# RPM
+rpm.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

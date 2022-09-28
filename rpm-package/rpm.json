@@ -1,0 +1,100 @@
+{
+  "extensions": {
+    "enabled": [
+      "python_venv",
+      "blocks",
+      "macros",
+      "file_permissions",
+      "file_extras"
+    ]
+  },
+  "core": {
+    "group": "Application/System",
+    "license": "GPLv2",
+    "name": "spammer-block",
+    "summary": "Tool to get CIDRs of a known spammer IP-address by AS-number and report known spam automatically",
+    "version": "0.8.0",
+    "release": "1"
+  },
+  "python_venv": {
+    "cmd": "python3 -m venv",
+    "flags": [
+      "--copies",
+      "--clear"
+    ],
+    "name": "spammer-block",
+    "path": "/usr/libexec/"
+  },
+  "blocks": {
+    "desc": [
+      "Tooling to help fight unsolicited email aka. spam.",
+      "From identified spam email:",
+      "1) Create IP-block list based on bad Internet neighbourhoods",
+      "2) Automated reporting of spam based on user interaction or block-list"
+    ],
+    "changelog": [
+      "* Wed Sep 28 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.0-1",
+      "- Fully tested and working Systemd daemon",
+      "* Wed Sep 28 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.2-2",
+      "- With configuration, it is possible to report spam to a mock reporting service",
+      "* Wed Sep 28 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.2-1",
+      "- Refactored D-Bus service to use configuration",
+      "* Mon Sep 26 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.1-4",
+      "- Attempt to get SElinux and logging to work",
+      "* Sun Sep 25 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.1-3",
+      "- Using Journald-logging when running as daemon",
+      "* Sun Sep 04 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.1-2",
+      "- Bugfix on spammer-block help-text to correctly document {ASN} usage",
+      "* Sun Sep 04 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.1-1",
+      "- Improvement on spammer-reporter.py to allow use on --config",
+      "* Sun Aug 12 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.0-3",
+      "- Added %attr definition to extra files",
+      "* Sun Aug 12 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.0-2",
+      "- Added force_root_override into Toml-configuration"
+    ],
+    "post": [
+      "semanage fcontext -a -t spammerblock_exec_t /usr/libexec/spammer-block/bin/python"
+    ]
+  },
+  "macros": {
+    "macros": [
+      "__os_install_post %{nil}",
+      "_build_id_links none"
+    ]
+  },
+  "file_permissions": {
+    "user": "root",
+    "group": "root",
+    "create_user": false,
+    "create_group": false
+  },
+  "file_extras": {
+    "files": [
+      {
+        "src": "systemd.service/spammer-reporter.conf",
+        "dest": "etc/dbus-1/system.d/spammer-reporter.conf",
+        "config": "noreplace"
+      },
+      {
+        "src": "systemd.service/spammer-reporter.toml",
+        "dest": "etc/sysconfig/spammer-reporter.toml",
+        "config": "noreplace",
+        "attr": "640, -, nobody"
+      },
+      {
+        "src": "systemd.service/spammer-reporter.service",
+        "dest": "usr/lib/systemd/system/spammer-reporter.service"
+      },
+      {
+        "src": "rpm-package/spammer-block",
+        "dest": "usr/bin/spammer-block",
+        "attr": "755, -, -"
+      },
+      {
+        "src": "rpm-package/spammer-reporter",
+        "dest": "usr/bin/spammer-reporter",
+        "attr": "755, -, -"
+      }
+    ]
+  }
+}

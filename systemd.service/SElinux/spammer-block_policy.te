@@ -1,0 +1,190 @@
+# Type Enforcement .te file
+policy_module(spammer-block_policy, 1.0.0);
+
+# Docs:
+# https://selinuxproject.org/page/ObjectClassesPerms
+
+require {
+	type home_root_t;
+	type user_home_dir_t;
+	type user_devpts_t;
+	type system_dbusd_t;
+	type system_dbusd_var_run_t;
+	type kernel_t;
+	type node_t;
+	type passwd_file_t;
+	type sssd_public_t;
+	type sssd_t;
+	type sssd_var_lib_t;
+	type tmp_t;
+	type user_home_t;
+	type bin_t;
+	type security_t;
+	type sysctl_fs_t;
+	type tmpfs_t;
+	type shell_exec_t;
+	type var_run_t;
+	type etc_runtime_t;
+	type var_t;
+	type init_var_run_t;
+	type net_conf_t;
+	type smtp_port_t;
+	type device_t;
+	type syslogd_var_run_t;
+
+	# Noise:
+	type abrt_etc_t;
+	type admin_home_t;
+	type arpwatch_data_t;
+	type bacula_spool_t;
+	type boot_t;
+	type chronyd_var_lib_t;
+	type colord_var_lib_t;
+	type configfs_t;
+	type debugfs_t;
+	type default_t;
+	type device_t;
+	type dkim_milter_data_t;
+	type dnsmasq_lease_t;
+	type dosfs_t;
+	type etc_runtime_t;
+	type fusefs_t;
+	type geoclue_var_lib_t;
+	type glusterd_var_run_t;
+	type home_root_t;
+	type hugetlbfs_t;
+	type mail_spool_t;
+	type named_cache_t;
+	type named_conf_t;
+	type named_zone_t;
+	type postfix_spool_t;
+	type postgresql_db_t;
+	type print_spool_t;
+	type public_content_t;
+	type redis_var_lib_t;
+	type saslauthd_var_run_t;
+	type security_t;
+	type slapd_db_t;
+	type squid_cache_t;
+	type sysctl_fs_t;
+	type tmpfs_t;
+	type unlabeled_t;
+	type user_tmp_t;
+	type var_lib_nfs_t;
+	type var_run_t;
+	type var_t;
+
+    # Classes used
+	class capability { dac_read_search };
+	class dir { search };
+	class file { execute setattr read lock create execute_no_trans write getattr unlink append };
+	class dbus { acquire_svc send_msg };
+	class tcp_socket { node_bind };
+	class unix_dgram_socket { create sendto getattr };
+	class unix_stream_socket { connectto sendto };
+	class sock_file { sendto getattr read write open };
+}
+
+type spammerblock_t;
+type spammerblock_exec_t;
+
+domain_type(spammerblock_t)
+init_daemon_domain(spammerblock_t, spammerblock_exec_t)
+
+# XXX
+# Enforcing? Permissive?
+#permissive spammerblock_t;
+
+########################################
+#
+# spammer-reporter-service local policy
+#
+
+#============= init_t ==============
+allow init_t spammerblock_t:dbus { send_msg };
+
+#============= spammerblock_t ==============
+allow spammerblock_t self:capability { dac_read_search dac_override };
+allow spammerblock_t self:dbus { send_msg };
+allow spammerblock_t self:tcp_socket { bind create connect read write };
+allow spammerblock_t self:unix_dgram_socket { create getattr getopt setopt write };
+allow spammerblock_t system_dbusd_t:dbus { acquire_svc send_msg };
+allow spammerblock_t system_dbusd_t:unix_stream_socket { connectto sendto };
+allow spammerblock_t system_dbusd_var_run_t:dir { search };
+allow spammerblock_t init_var_run_t:sock_file { sendto read write open };
+allow spammerblock_t init_t:dbus { send_msg };
+allow spammerblock_t kernel_t:unix_dgram_socket { sendto };
+allow spammerblock_t node_t:tcp_socket { node_bind };
+
+# Journald
+allow spammerblock_t user_devpts_t:chr_file { append read write };
+allow spammerblock_t syslogd_var_run_t:dir search;
+
+# Send mail via SMTP
+allow spammerblock_t net_conf_t:file { getattr open read };
+allow spammerblock_t smtp_port_t:tcp_socket { name_connect };
+
+# Read list of users
+allow spammerblock_t passwd_file_t:file { getattr open read };
+allow spammerblock_t sssd_public_t:file { map getattr open read };
+allow spammerblock_t sssd_public_t:dir { search };
+allow spammerblock_t sssd_t:unix_stream_socket { connectto sendto };
+allow spammerblock_t sssd_var_lib_t:dir { search };
+allow spammerblock_t sssd_var_lib_t:sock_file { write };
+
+# Read user's home directories
+allow spammerblock_t user_home_dir_t:dir { getattr search };
+allow spammerblock_t user_home_t:dir { getattr read search };
+allow spammerblock_t user_home_t:file { ioctl open read };
+allow spammerblock_t user_home_t:lnk_file read;
+
+# Python execute
+allow spammerblock_t bin_t:file { map execute execute_no_trans };
+allow spammerblock_t shell_exec_t:file { map execute execute_no_trans };
+
+# GlibC requires access to /tmp
+allow spammerblock_t tmp_t:file { map create unlink write execute };
+allow spammerblock_t tmp_t:dir { add_name remove_name write };
+
+# Noise:
+# Python is very touchy-feely and loves accessing lots of unrelated files and directories.
+dontaudit spammerblock_t abrt_etc_t:dir { getattr search };
+dontaudit spammerblock_t admin_home_t:dir { getattr search };
+dontaudit spammerblock_t arpwatch_data_t:dir { getattr search };
+dontaudit spammerblock_t bacula_spool_t:dir { getattr search };
+dontaudit spammerblock_t boot_t:dir { getattr search };
+dontaudit spammerblock_t chronyd_var_lib_t:dir { getattr search };
+dontaudit spammerblock_t colord_var_lib_t:dir { getattr search };
+dontaudit spammerblock_t configfs_t:dir { getattr search };
+dontaudit spammerblock_t debugfs_t:dir { getattr search };
+dontaudit spammerblock_t default_t:dir { getattr search };
+dontaudit spammerblock_t device_t:dir { getattr search };
+dontaudit spammerblock_t dkim_milter_data_t:dir { getattr search };
+dontaudit spammerblock_t dnsmasq_lease_t:dir { getattr search };
+dontaudit spammerblock_t dosfs_t:dir { getattr search };
+dontaudit spammerblock_t etc_runtime_t:dir { getattr search };
+dontaudit spammerblock_t fusefs_t:dir { getattr search };
+dontaudit spammerblock_t geoclue_var_lib_t:dir { getattr search };
+dontaudit spammerblock_t glusterd_var_run_t:dir { getattr search };
+dontaudit spammerblock_t home_root_t:dir { getattr search };
+dontaudit spammerblock_t hugetlbfs_t:dir { getattr search };
+dontaudit spammerblock_t mail_spool_t:dir { getattr search };
+dontaudit spammerblock_t named_cache_t:dir { getattr search };
+dontaudit spammerblock_t named_conf_t:dir { getattr search };
+dontaudit spammerblock_t named_zone_t:dir { getattr search };
+dontaudit spammerblock_t postfix_spool_t:dir { getattr search };
+dontaudit spammerblock_t postgresql_db_t:dir { getattr search };
+dontaudit spammerblock_t print_spool_t:dir { getattr search };
+dontaudit spammerblock_t public_content_t:dir { getattr search };
+dontaudit spammerblock_t redis_var_lib_t:dir { getattr search };
+dontaudit spammerblock_t saslauthd_var_run_t:dir { getattr search };
+dontaudit spammerblock_t security_t:dir { getattr search };
+dontaudit spammerblock_t slapd_db_t:dir { getattr search };
+dontaudit spammerblock_t squid_cache_t:dir { getattr search };
+dontaudit spammerblock_t sysctl_fs_t:dir { getattr search };
+dontaudit spammerblock_t tmpfs_t:dir { getattr search };
+dontaudit spammerblock_t unlabeled_t:dir { getattr search };
+dontaudit spammerblock_t user_tmp_t:dir { getattr search };
+dontaudit spammerblock_t var_lib_nfs_t:dir { getattr search };
+dontaudit spammerblock_t var_run_t:dir { getattr search };
+dontaudit spammerblock_t var_t:dir { getattr search };

@@ -1,0 +1,13 @@
+## <summary></summary>
+interface(`spammerblock_domtrans',`
+	gen_require(`
+		type spammerblock_t, spammerblock_exec_t;
+	')
+
+	domain_auto_trans($1,spammerblock_exec_t,spammerblock_t)
+
+	allow spammerblock_t $1:fd use;
+	allow spammerblock_t $1:fifo_file rw_file_perms;
+	allow spammerblock_t $1:process sigchld;
+')
+#

@@ -66,17 +66,22 @@ def main():
                         help='Output to a file.')
     parser.add_argument('--postfix-rule', default=NetworkOutputPostfix.DEFAULT_POSTFIX_RULE,
                         help='CIDR-table rule to apply for a net.\n'
-                             'Dynamic AS-number assignment with "{{ASN}}".\n'
-                             'Default: "{}"'.format(
-                            NetworkOutputPostfix.DEFAULT_POSTFIX_RULE)
-                        )
+                             'Dynamic AS-number assignment with "{}".\n'
+                             'Default: "{}"\n'
+                             'Example: "PREPEND X-Spam-ASN: AS{{ASN}}"'.format(
+                            NetworkOutputPostfix.DYNAMIC_AS_NUMBER_REPLACEMENT,
+                            NetworkOutputPostfix.DEFAULT_POSTFIX_RULE
+                        ))
     parser.add_argument('--log-level', default="WARNING",
                         help='Set logging level. Python default is: WARNING')
     parser.add_argument('--ipinfo-token', default=None,
                         help='ipinfo.io API access token if using paid ASN query service')
     parser.add_argument('--asn-result-json-file',
                         help='To conserve ASN-queries, save query result\n'
-                             'or use existing result from a previous query.')
+                             'or use existing result from a previous query.\n'
+                             'Dynamic AS-number assignment with "{}".'.format(
+                            SpammerBlock.DYNAMIC_AS_NUMBER_REPLACEMENT
+                        ))
     args = parser.parse_args()
 
     _setup_logger(args.log_level)

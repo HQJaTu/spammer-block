@@ -44,7 +44,7 @@ log = logging.getLogger(__name__)
 
 
 class SpammerBlock:
-    ipinfo_token = None
+    DYNAMIC_AS_NUMBER_REPLACEMENT = '{ASN}'
 
     def __init__(self, datasource: DatasourceBase):
         self._datasource = datasource
@@ -100,20 +100,21 @@ class SpammerBlock:
         :param ip:
         :param asn: AS-number to query
         :param asn_json_result_file: If exists, don't query, use previously saved cache data
-        :param short_circuit_asn_result: Don't query, use this JSON data from external source
         :return:
         """
 
-        # Query 2:
-        # Get list of all IP-ranges for given AS-number
-
+        if asn_json_result_file and self.DYNAMIC_AS_NUMBER_REPLACEMENT in asn_json_result_file:
+            asn_json_result_file_to_use = asn_json_result_file.format(ASN=asn)
+        else:
+            asn_json_result_file_to_use = asn_json_result_file
+        # Query: Get list of all IP-ranges for given AS-number
         if asn_json_result_file:
             # From cache?
-            if not os.path.exists(asn_json_result_file):
-                log.warning("ASN JSON result file {} doesn't exist! Ignoring.".format(asn_json_result_file))
+            if not os.path.exists(asn_json_result_file_to_use):
+                log.warning("ASN JSON result file {} doesn't exist! Ignoring as input.".format(asn_json_result_file_to_use))
             else:
-                log.info("Using existing result file {}".format(asn_json_result_file))
-                with open(asn_json_result_file) as json_file:
+                log.info("Using existing result file {}".format(asn_json_result_file_to_use))
+                with open(asn_json_result_file_to_use) as json_file:
                     asn_data = json.load(json_file)
 
                 # Sanity
@@ -143,9 +144,10 @@ class SpammerBlock:
         # net = IPWhoisNet(ip, allow_permutations=False)
         asn_result = self._datasource.lookup(asn)
 
-        if asn_result and asn_json_result_file:
-            # Don't save nothingness.
-            with open(asn_json_result_file, "w") as asn_result_file:
+        # Don't save nothingness.
+        if asn_result and asn_json_result_file_to_use:
+            log.info("Writing ASN JSON result file {}.".format(asn_json_result_file_to_use))
+            with open(asn_json_result_file_to_use, "w") as asn_result_file:
                 asn_result_file.write(json.dumps(asn_result))
 
         return asn_result
