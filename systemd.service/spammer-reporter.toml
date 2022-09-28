@@ -1,6 +1,8 @@
 [Reporter]
 from_address = ""
 spamcop_report_address = ""
+# For testing and debugging:
+#mock_report_address = ""
 smtpd_address = ""
 
 [Daemon]

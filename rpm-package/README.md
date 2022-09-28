@@ -8,6 +8,11 @@
 6. `rpmvenv rpm.json`
 7. Wait for brand new `.rpm` to appear. Done! `rpm --install`
 
+## Python-wrappers
+As running Python-code from dedicated venv is tricky, there are
+`/usr/bin/spammer-block` and `/usr/bin/spammer-reporter` wrappers passing
+through any/all arguments given.
+
 ## Links
 
 * https://github.com/kevinconway/rpmvenv

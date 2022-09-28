@@ -1,6 +1,17 @@
 # Spam reporter service
 Systemd service for reporting received email as spam
 
+## Features
+* Runs as daemon
+* Natively Systemd-compliant
+  * Runs as _notify_-type
+* Deploys in own Python venv to be immune of system changes
+* Asynchronous / event-driven
+* Secure:
+  * SElinux-policy
+  * Daemon uses Linux capabilities to restrict privileges
+* Configurable with separate file in `/etc`
+
 # D-Bus
 
 ## Bus-types
@@ -88,6 +99,15 @@ dbus-send \
 ```
 
 # Systemd
+
+Docs: https://www.freedesktop.org/software/systemd/man/systemd.service.html
+
+## Notify-type daemon
+For best results, this type of service runs as type _notify_.
+Practically this means, the Python code needs to ping Linux every 30 seconds as keep-alive pulse.
+Miss one ping and Linux will restart the service.
+
+Pinging / notifying is done using asynchronous calls to reduce idle CPU-load to absolute minimum.
 
 ## Capabilities
 `.service` definition has following:

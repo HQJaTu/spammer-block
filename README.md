@@ -135,8 +135,8 @@ fighting against spam. An example of one would be [SpamCop](https://www.spamcop.
 usage: spammer-reporter.py [-h] [--from-address FROM_ADDRESS]
                            [--smtpd-address SMTPD_ADDRESS]
                            [--spamcop-report-address REPORT-ADDRESS]
-                           [--spamcop-report-from-stdin]
-                           [--spamcop-report-from-file FILENAME]
+                           [--mock-report-address REPORT-ADDRESS]
+                           [--report-from-stdin] [--report-from-file FILENAME]
                            [--dbus BUS-TYPE-TO-USE] [--log-level LOG_LEVEL]
                            [--config-file TOML-CONFIGURATION-FILE]
 
@@ -151,16 +151,16 @@ optional arguments:
                         Send mail using SMTPd at address. Default: 127.0.0.1
   --spamcop-report-address REPORT-ADDRESS
                         Report to Spamcop using given address
-  --spamcop-report-from-stdin
-                        Read email from STDIN and report it as spam into
-                        Spamcop
-  --spamcop-report-from-file FILENAME
+  --mock-report-address REPORT-ADDRESS
+                        Report to given e-mail address. Simulate reporting for
+                        test purposes.
+  --report-from-stdin   Read email from STDIN and report it as spam
+  --report-from-file FILENAME
                         Read email from a RFC2822 file and report it as spam
-                        into Spamcop
   --dbus BUS-TYPE-TO-USE
                         Use D-Bus for reporting. Ignoring all arguments,
-                        except must use --spamcop-report-from-file. Choices:
-                        system, session
+                        except must use --report-from-file. Choices: system,
+                        session
   --log-level LOG_LEVEL
                         Set logging level. Python default is: WARNING
   --config-file TOML-CONFIGURATION-FILE
