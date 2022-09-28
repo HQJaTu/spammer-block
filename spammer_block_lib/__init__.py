@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 
 from .spammer_block import SpammerBlock
-from .outputs import NetworkOutputNone, NetworkOutputJson, NetworkOutputPostfix
+from .output import NetworkOutputNone, NetworkOutputJson, NetworkOutputPostfix
 from .spamcop_reporter import SpamcopReporter
 from .gmail_reporter import GmailReporter
 from .sendgrid_reporter import SendgridReporter
