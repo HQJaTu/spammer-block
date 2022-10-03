@@ -3,6 +3,7 @@
 
 %define relabel_files() \
 restorecon -R /usr/libexec/spammer-block/bin/python; \
+restorecon -R /usr/libexec/spammer-block/lib; \
 
 %define selinux_policyver 0.0.0
 
@@ -17,7 +18,7 @@ License:	GPLv2+
 URL:		http://HOSTNAME
 Source0:	spammer-block_policy.pp
 Source1:	spammer-block_policy.if
-Source2:	spammer-block_policy_selinux.8
+#Source2:	spammer-block_policy_selinux.8
 
 
 Requires: policycoreutils, libselinux-utils
@@ -33,8 +34,8 @@ install -d %{buildroot}%{_datadir}/selinux/packages
 install -m 644 %{SOURCE0} %{buildroot}%{_datadir}/selinux/packages
 install -d %{buildroot}%{_datadir}/selinux/devel/include/contrib
 install -m 644 %{SOURCE1} %{buildroot}%{_datadir}/selinux/devel/include/contrib/
-install -d %{buildroot}%{_mandir}/man8/
-install -m 644 %{SOURCE2} %{buildroot}%{_mandir}/man8/spammer-block_policy_selinux.8
+#install -d %{buildroot}%{_mandir}/man8/
+#install -m 644 %{SOURCE2} %{buildroot}%{_mandir}/man8/spammer-block_policy_selinux.8
 install -d %{buildroot}/etc/selinux/targeted/contexts/users/
 
 
@@ -61,10 +62,9 @@ exit 0
 %files
 %attr(0600,root,root) %{_datadir}/selinux/packages/spammer-block_policy.pp
 %{_datadir}/selinux/devel/include/contrib/spammer-block_policy.if
-%{_mandir}/man8/spammer-block_policy_selinux.8.*
+#{_mandir}/man8/spammer-block_policy_selinux.8.*
 
 
 %changelog
-* Mon Oct  3 2022 YOUR NAME <YOUR@EMAILADDRESS> 1.0-1
+* Mon Oct  3 2022 Jari Turkia <jatu@hqcodeshop.fi> 1.0-1
 - Initial version
-
