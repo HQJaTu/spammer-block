@@ -145,6 +145,10 @@ For security reasons, it would be sensible for daemon to run as non-_root_, howe
 capability to allow iterating directory contents or traversing filesystem while ignoring
 permissions. Such functionality is critical, feasible options for non-_root_ operation are lacking, so daemon runs as _root_.
 
+### D-Bus
+When running system D-Bus, it is possible only as _root_.
+For security reasons it would be advisable to run as non-root, but in D-Bus that is not possible.
+
 ## Checking effective capabilities of the service
 
 1. Find PID, `systemctl status spammer-reporter`
