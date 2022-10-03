@@ -53,7 +53,6 @@
       "- Added force_root_override into Toml-configuration"
     ],
     "post": [
-      "semanage fcontext -a -t spammerblock_exec_t /usr/libexec/spammer-block/bin/python"
     ]
   },
   "macros": {
