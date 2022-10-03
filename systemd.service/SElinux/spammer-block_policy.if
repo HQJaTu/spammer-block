@@ -1,13 +1,40 @@
-## <summary></summary>
-interface(`spammerblock_domtrans',`
+
+## <summary>policy for spammer-block_policy</summary>
+
+########################################
+## <summary>
+##	Execute spammer-block_policy_exec_t in the spammer-block_policy domain.
+## </summary>
+## <param name="domain">
+## <summary>
+##	Domain allowed to transition.
+## </summary>
+## </param>
+#
+interface(`spammer-block_policy_domtrans',`
 	gen_require(`
-		type spammerblock_t, spammerblock_exec_t;
+		type spammer-block_policy_t, spammer-block_policy_exec_t;
 	')
 
-	domain_auto_trans($1,spammerblock_exec_t,spammerblock_t)
-
-	allow spammerblock_t $1:fd use;
-	allow spammerblock_t $1:fifo_file rw_file_perms;
-	allow spammerblock_t $1:process sigchld;
+	corecmd_search_bin($1)
+	domtrans_pattern($1, spammer-block_policy_exec_t, spammer-block_policy_t)
 ')
+
+######################################
+## <summary>
+##	Execute spammer-block_policy in the caller domain.
+## </summary>
+## <param name="domain">
+##	<summary>
+##	Domain allowed access.
+##	</summary>
+## </param>
 #
+interface(`spammer-block_policy_exec',`
+	gen_require(`
+		type spammer-block_policy_exec_t;
+	')
+
+	corecmd_search_bin($1)
+	can_exec($1, spammer-block_policy_exec_t)
+')

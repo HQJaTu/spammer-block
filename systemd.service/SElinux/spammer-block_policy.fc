@@ -1,0 +1,1 @@
+/usr/libexec/spammer-block/bin/python		--	gen_context(system_u:object_r:spammer-block_policy_exec_t,s0)
