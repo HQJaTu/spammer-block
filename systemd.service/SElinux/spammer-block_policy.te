@@ -5,21 +5,21 @@ policy_module(spammer-block_policy, 1.0.0)
 # Declarations
 #
 
-type spammer-block_policy_t;
-type spammer-block_policy_exec_t;
-init_daemon_domain(spammer-block_policy_t, spammer-block_policy_exec_t)
+type spammerblock_t;
+type spammerblock_exec_t;
+init_daemon_domain(spammerblock_t, spammerblock_exec_t)
 
-permissive spammer-block_policy_t;
+permissive spammerblock_t;
 
 ########################################
 #
 # spammer-block_policy local policy
 #
-allow spammer-block_policy_t self:fifo_file rw_fifo_file_perms;
-allow spammer-block_policy_t self:unix_stream_socket create_stream_socket_perms;
+allow spammerblock_t self:fifo_file rw_fifo_file_perms;
+allow spammerblock_t self:unix_stream_socket create_stream_socket_perms;
 
-domain_use_interactive_fds(spammer-block_policy_t)
+domain_use_interactive_fds(spammerblock_t)
 
-files_read_etc_files(spammer-block_policy_t)
+files_read_etc_files(spammerblock_t)
 
-miscfiles_read_localization(spammer-block_policy_t)
+miscfiles_read_localization(spammerblock_t)

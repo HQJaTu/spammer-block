@@ -43,7 +43,7 @@ make -f /usr/share/selinux/devel/Makefile spammer-block_policy.pp || exit
 /usr/sbin/semodule -i spammer-block_policy.pp
 
 # Generate a man page off the installed module
-sepolicy manpage -p . -d spammer-block_policy_t
+sepolicy manpage -p . -d spammerblock_t
 # Fixing the file context on /usr/libexec/spammer-block/bin/python
 /sbin/restorecon -F -R -v /usr/libexec/spammer-block/bin/python
 # Generate a rpm package for the newly generated policy

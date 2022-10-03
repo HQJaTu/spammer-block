@@ -1,1 +1,2 @@
-/usr/libexec/spammer-block/bin/python		--	gen_context(system_u:object_r:spammer-block_policy_exec_t,s0)
+/usr/libexec/spammer-block/bin/python		--	gen_context(system_u:object_r:spammerblock_exec_t,s0)
+/usr/libexec/spammer-block/lib(/.*)?		gen_context(system_u:object_r:lib_t,s0)
