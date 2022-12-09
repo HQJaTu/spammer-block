@@ -1,5 +1,5 @@
 asyncinotify==2.0.2
-certifi==2021.10.8
+certifi==2022.12.7
 charset-normalizer==2.0.12
 dbus-python==1.2.18
 dnspython==2.0.0
