@@ -1,19 +1,44 @@
 # Packaging RPM
+There are two separate packages.
 
+## Package 1: Python-code
+
+### Prep
 1. `ln -s rpm-package/rpm.json .`
 2. `python -m venv venv.rpmvenv`
 3. `. venv.rpmvenv/bin/activate`
 4. `pip install rpmvenv`
 5. `pip install rpmvenv-macros`
-6. `rpmvenv rpm.json`
-7. Wait for brand new `.rpm` to appear. Done! `rpm --install`
+6. Prep done! 
 
-## Python-wrappers
+### Package
+1. Run this in package root directory, see: `ln -s rpm-package/rpm.json .`
+2. `rpmvenv rpm.json`
+3. Wait for brand new `.rpm` to appear.
+4. Done! `rpm --install` the resulting package.
+
+### Python-wrappers
 As running Python-code from dedicated venv is tricky, there are
 `/usr/bin/spammer-block` and `/usr/bin/spammer-reporter` wrappers passing
 through any/all arguments given.
 
-## Links
+## Package 2: SElinux-policy
+Producing RPM from SElinux-policy is done traditionally.
+
+### Prep
+1. Install package _rpm-build_
+2. Make sure _make_ is installed
+3. Make sure your `rpmbuild/` directory tree exists
+
+### Package
+1. In `systemd.service/SElinux/` run `make`.
+2. Make outputs a binary policy file `spammer-block_policy.pp`
+3. Copy `spammer-block_policy.pp` and `spammer-block_policy.if` to your `rpmbuild/SOURCES/`
+4. (working directory isn't a parameter) `rpmbuild -ba systemd.service/SElinux/spammer-block_policy_selinux.spec`
+5. Resulting RPM will be stored into `rpmbuild/RPMS/noarch/`
+6. Done! `rpm --install` the resulting package.
+
+# Links
 
 * https://github.com/kevinconway/rpmvenv
 * https://github.com/danfoster/rpmvenv-macros
