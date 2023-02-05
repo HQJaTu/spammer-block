@@ -13,7 +13,7 @@
     "license": "GPLv2",
     "name": "spammer-block",
     "summary": "Tool to get CIDRs of a known spammer IP-address by AS-number and report known spam automatically",
-    "version": "0.8.0",
+    "version": "0.8.1",
     "release": "1"
   },
   "python_venv": {
@@ -33,6 +33,8 @@
       "2) Automated reporting of spam based on user interaction or block-list"
     ],
     "changelog": [
+      "* Sun Feb 05 2023 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.1-1",
+      "- Bumped Python package certifi to a secure version",
       "* Wed Sep 28 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.0-1",
       "- Fully tested and working Systemd daemon",
       "* Wed Sep 28 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.2-2",
@@ -47,9 +49,9 @@
       "- Bugfix on spammer-block help-text to correctly document {ASN} usage",
       "* Sun Sep 04 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.1-1",
       "- Improvement on spammer-reporter.py to allow use on --config",
-      "* Sun Aug 12 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.0-3",
+      "* Fri Aug 12 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.0-3",
       "- Added %attr definition to extra files",
-      "* Sun Aug 12 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.0-2",
+      "* Fri Aug 12 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.7.0-2",
       "- Added force_root_override into Toml-configuration"
     ],
     "post": [

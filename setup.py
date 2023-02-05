@@ -31,6 +31,7 @@ setup(
                       'asyncinotify==2.0.2',
                       'systemd-watchdog==0.9.0',
                       'dbus-python==1.2.18',
+                      'certifi==2022.12.7',
                       'toml==0.10.2'
                       ],
     scripts=['cli-utils/spammer-block.py',

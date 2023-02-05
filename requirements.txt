@@ -1,5 +1,5 @@
 asyncinotify==2.0.2
-certifi==2021.10.8
+certifi==2022.12.7
 charset-normalizer==2.0.12
 dbus-python==1.2.18
 dnspython==2.0.0
@@ -9,9 +9,10 @@ idna==3.3
 ipwhois @ git+https://github.com/HQJaTu/ipwhois.git@9ac857bb7b593052a39919d4fbc7a479079474f4
 netaddr==0.8.0
 pycairo==1.21.0
-PyGObject==3.42.0
+PyGObject==3.42.2
 python-systemd==0.0.9
 requests==2.27.1
 systemd==0.16.1
 systemd-watchdog==0.9.0
+toml==0.10.2
 urllib3==1.26.8
