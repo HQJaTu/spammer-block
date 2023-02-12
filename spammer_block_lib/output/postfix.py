@@ -26,7 +26,7 @@ class NetworkOutputPostfix(NetworkOutputAbstract):
     def __init__(self, rule: str = DEFAULT_POSTFIX_RULE):
         self.rule = rule
 
-    def _do_report(self, ip: str, asn: int, nets: dict, skip_overlap: bool):
+    def _do_report(self, ip: str, asn: int, nets: dict, skip_overlap: bool) -> str:
         """
         Produce CIDR-table
         Docs: https://www.postfix.org/cidr_table.5.html

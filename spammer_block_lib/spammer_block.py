@@ -58,7 +58,7 @@ class SpammerBlock:
         :param asn: (optional, not needed if ASN given) AS-number to query for
         :param asn_json_result_file: If file exists, short-circuit and read previous query result from this file.
                                      If file not exist, query and write result to this file as JSON for next use.
-        :return: dict of networks
+        :return: tuple: int AS-number, dict of networks, key =
         """
         if not asn:
             # Convert input IP into AS-number
@@ -111,7 +111,8 @@ class SpammerBlock:
         if asn_json_result_file:
             # From cache?
             if not os.path.exists(asn_json_result_file_to_use):
-                log.warning("ASN JSON result file {} doesn't exist! Ignoring as input.".format(asn_json_result_file_to_use))
+                log.warning("ASN JSON result file {} doesn't exist! Ignoring as input."
+                            .format(asn_json_result_file_to_use))
             else:
                 log.info("Using existing result file {}".format(asn_json_result_file_to_use))
                 with open(asn_json_result_file_to_use) as json_file:
@@ -168,14 +169,14 @@ class SpammerBlock:
                 try:
                     IPv4Network(net)
                     address_family = 4
-                    log.debug("Net {} is IPv4".format(net))
+                    log.debug("_process_asn_list() Net {} is IPv4".format(net))
                 except AddressValueError:
                     try:
                         IPv6Network(net)
                         address_family = 6
-                        log.debug("Net {} is IPv6".format(net))
+                        log.debug("_process_asn_list() Net {} is IPv6".format(net))
                     except AddressValueError:
-                        log.error("Net {} is neither IPv4 nor IPv6".format(net))
+                        log.error("_process_asn_list() Net {} is neither IPv4 nor IPv6".format(net))
                         raise
 
                 if net_info['description'] and True:
@@ -205,65 +206,86 @@ class SpammerBlock:
         return nets_data
 
     @staticmethod
-    def _post_process_asn_result(nets_data) -> dict:
-
-        # Post-process
+    def _post_process_asn_result(nets_data: dict) -> dict:
+        log.debug("_post_process_asn_result(): Begin")
 
         # 1) Keep the list of CIDRs in a sorted list.
         #    Sorted networkwise, not alphabetically.
         sorted_nets = sorted(nets_data.keys(), key=SpammerBlock._ip_sort_helper)
 
         # 2) See if it is possible to combine results into fewer resulting nets
-        ipv4_nets = []
-        ipv6_nets = []
+        ipv4_nets_set = set()
+        ipv4_nets_to_merge = []
+        ipv6_nets_set = set()
+        ipv6_nets_to_merge = []
         for net_to_check, net_to_check_data in nets_data.items():
             if net_to_check_data['family'] == 4:
-                ipv4_nets.append(IPNetwork(net_to_check))
+                ipv4_nets_set.add(IPv4Network(net_to_check))
+                ipv4_nets_to_merge.append(IPNetwork(net_to_check))
             elif net_to_check_data['family'] == 6:
-                ipv6_nets.append(IPNetwork(net_to_check))
+                ipv6_nets_set.add(IPv6Network(net_to_check))
+                ipv6_nets_to_merge.append(IPNetwork(net_to_check))
             else:
                 continue
 
-        ipv4_nets_merged = netaddr_cidr_merge(ipv4_nets)
-        ipv6_nets_merged = netaddr_cidr_merge(ipv6_nets)
+        # Merge
+        # Will result list of IPNetwork
+        ipv4_nets_merged = netaddr_cidr_merge(list(ipv4_nets_to_merge))
+        ipv6_nets_merged = netaddr_cidr_merge(list(ipv6_nets_to_merge))
+        del ipv4_nets_to_merge # IPNetwork-objects are not needed after this
+        del ipv6_nets_to_merge
 
-        ipv4_nets_merged = [str(net.cidr) for net in ipv4_nets_merged]
-        ipv6_nets_merged = [str(net.cidr) for net in ipv6_nets_merged]
-
-        ipv4_new_nets = [net for net in ipv4_nets_merged if net not in set(sorted_nets)]
-        ipv6_new_nets = [net for net in ipv6_nets_merged if net not in set(sorted_nets)]
+        sorted_nets_set = set(sorted_nets)
+        ipv4_new_nets = [str(net.cidr) for net in ipv4_nets_merged if str(net.cidr) not in sorted_nets_set]
+        ipv6_new_nets = [str(net.cidr) for net in ipv6_nets_merged if str(net.cidr) not in sorted_nets_set]
 
         net_data_out = {}
+
+        log.debug("_post_process_asn_result(): Prep done")
 
         # Prepare the output data
         # 3.1) IPv4 networks
         for net_to_check in ipv4_nets_merged:
+            net_to_check_str = str(net_to_check.cidr)
             # Don't do those merged networks we've already done
-            if net_to_check in net_data_out:
+            if net_to_check_str in net_data_out:
                 continue
 
             net_to_check_obj = IPv4Network(net_to_check)
-            if net_to_check in ipv4_new_nets:
-                # This is a "new" network formed by merging existing results.
-                net_data_out[net_to_check] = {
-                    'desc': '',
-                    'overlap': False,
-                    'family': 4
-                }
-
-                # Add the "old" networks the newly merged network shadows.
-                for other_net_to_check in ipv4_nets:
-                    net = str(other_net_to_check.cidr)
-                    other_net_to_check_obj = IPv4Network(net)
-                    if net_to_check_obj.overlaps(other_net_to_check_obj):
-                        net_data_out[net] = nets_data[net]
-                        net_data_out[net]['overlap'] = net_to_check
-
-                # New network done, go for next one
+            if net_to_check_str not in ipv4_new_nets:
+                # Not a new net, not a merged net
+                net_data_out[net_to_check_str] = nets_data[net_to_check_str]
+                ipv4_nets_set.remove(net_to_check_obj)
                 continue
 
-            # Not a new net, not a merged net
-            net_data_out[net_to_check] = nets_data[net_to_check]
+            # This is a "new" network formed by merging existing results.
+            net_data_out[net_to_check_str] = {
+                'desc': '',
+                'overlap': False,
+                'family': 4
+            }
+
+            # Add the "old" networks the newly merged network shadows.
+            overlapping_nets = []
+            overlapping_descs = []
+            for other_net_to_check in ipv4_nets_set:
+                if net_to_check_obj.overlaps(other_net_to_check):
+                    overlapping_nets.append(other_net_to_check)
+                    net = other_net_to_check.with_prefixlen
+                    net_data_out[net] = nets_data[net]
+                    net_data_out[net]['overlap'] = net_to_check_str
+                    if nets_data[net]['desc']:
+                        overlapping_descs.append(nets_data[net]['desc'])
+
+            if overlapping_descs:
+                # Add only unique descriptions
+                net_data_out[net_to_check_str]['desc'] = ', '.join(list(set(overlapping_descs)))
+            for net_to_remove in overlapping_nets:
+                ipv4_nets_set.remove(net_to_remove)
+
+            # New network done, go for next one
+
+        log.debug("_post_process_asn_result(): IPv4 networks done")
 
         # 3.2) IPv6 networks
         for net_to_check in ipv6_nets_merged:
@@ -307,6 +329,9 @@ class SpammerBlock:
 
             # Not a new net, not a merged net
             net_data_out[net_to_check] = nets_data[net_to_check]
+
+        log.debug("_post_process_asn_result() IPv6 networks done")
+        log.debug("_post_process_asn_result(): Ready")
 
         return net_data_out
 

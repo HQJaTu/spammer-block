@@ -21,6 +21,6 @@ from .abstract import NetworkOutputAbstract
 
 class NetworkOutputNone(NetworkOutputAbstract):
 
-    def _do_report(self, ip: str, asn: int, nets: dict, skip_overlap: bool):
+    def _do_report(self, ip: str, asn: int, nets: dict, skip_overlap: bool) -> str:
         # This method intentionally left blank.
-        pass
+        return ""

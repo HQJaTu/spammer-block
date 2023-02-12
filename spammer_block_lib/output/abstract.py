@@ -21,12 +21,12 @@ from abc import ABC, abstractmethod
 
 class NetworkOutputAbstract(ABC):
 
-    def report(self, ip: str, asn: int, nets: dict, skip_overlap: bool):
+    def report(self, ip: str, asn: int, nets: dict, skip_overlap: bool) -> str:
         if not nets:
             raise ValueError("No nets found for IPv4 {}, AS{}! Cannot continue.".format(ip, asn))
 
         return self._do_report(ip, asn, nets, skip_overlap)
 
     @abstractmethod
-    def _do_report(self, ip: str, asn: int, nets: dict, skip_overlap: bool):
+    def _do_report(self, ip: str, asn: int, nets: dict, skip_overlap: bool) -> str:
         raise NotImplemented("This is an abstract class!")

@@ -21,10 +21,23 @@ from .abstract import NetworkOutputAbstract
 
 class NetworkOutputJson(NetworkOutputAbstract):
 
-    def _do_report(self, ip: str, asn: int, nets: dict, skip_overlap: bool):
+    def _do_report(self, ip: str, asn: int, nets: dict, skip_overlap: bool) -> str:
+        """
+        Raw output of network data
+        :param ip: IP-address where spam originated
+        :param asn: AS-number to stamp into report
+        :param nets: List of networks belonging to AS-number
+        :param skip_overlap: Create shorter list and skip any overlapping networks
+        :return:
+        """
         import json
 
-        nets_out = {'confirmed_ip': ip, 'asn': asn, 'nets': nets}
+        if skip_overlap:
+            nets_in = nets
+        else:
+            nets_in = {net for net, net_data in nets.items() if not net_data['overlap']}
+
+        nets_out = {'confirmed_ip': ip, 'asn': asn, 'nets': nets_in}
         json = json.dumps(nets_out, indent=4)
 
         return json

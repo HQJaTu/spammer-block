@@ -55,9 +55,10 @@ def main():
                         help='IPv4 address to query for')
     parser.add_argument('--asn', '-a',
                         help='Skip querying for ASN')
-    parser.add_argument('--skip-overlapping', action="store_true",
+    parser.add_argument('--skip-overlapping', '--merge-overlapping', action="store_true",
                         default=True,
-                        help="Don't display any overlapping subnets. Default: yes")
+                        help="Don't display any overlapping subnets. Larger network will be merged "
+                             "to hide smaller ones. Default: yes")
     parser.add_argument('--output-format', '-o', default='postfix',
                         help='Output format. Choices: ' +
                              ', '.join(NET_LIST_OUTPUT_OPTIONS) + "\n" +
@@ -73,7 +74,8 @@ def main():
                             NetworkOutputPostfix.DEFAULT_POSTFIX_RULE
                         ))
     parser.add_argument('--log-level', default="WARNING",
-                        help='Set logging level. Python default is: WARNING')
+                        help='Set logging level (CRITICAL, FATAL, ERROR, WARNING, INFO, DEBUG). '
+                             'Python default is: WARNING')
     parser.add_argument('--ipinfo-token', default=None,
                         help='ipinfo.io API access token if using paid ASN query service')
     parser.add_argument('--asn-result-json-file',
