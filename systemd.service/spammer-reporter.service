@@ -12,7 +12,34 @@ WatchdogSec=20s
 Restart=on-failure
 StandardOutput=syslog
 StandardError=syslog
-PrivateTmp=yes
+#PrivateTmp=yes
+
+# From low-memory-monitor.service:
+CPUSchedulingPolicy=fifo
+CPUSchedulingPriority=1
+
+# Filesystem lockdown
+ProtectSystem=strict
+PrivateDevices=true
+ProtectControlGroups=true
+ProtectHome=true
+PrivateTmp=true
+
+# Network
+PrivateNetwork=true
+RestrictAddressFamilies=AF_UNIX AF_LOCAL AF_NETLINK
+
+# Execute Mappings
+MemoryDenyWriteExecute=true
+
+# Modules
+ProtectKernelModules=true
+
+# Real-time
+RestrictRealtime=true
+
+# Privilege escalation
+NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
