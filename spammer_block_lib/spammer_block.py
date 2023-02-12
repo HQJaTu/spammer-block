@@ -24,7 +24,7 @@ __version__ = '0.5'
 __license__ = 'GPLv2'
 __banner__ = 'cert_check_lib v{} ({})'.format(__version__, __git__)
 
-from typing import Tuple, Union
+from typing import Tuple, Union, List
 from ipwhois import (
     IPWhois,
     Net as IPWhoisNet,
@@ -32,7 +32,7 @@ from ipwhois import (
 )
 from ipwhois.asn import ASNOrigin as IPWhoisASNOrigin
 from ipaddress import IPv4Address, IPv6Address, AddressValueError, IPv4Network, IPv6Network
-from netaddr import cidr_merge as netaddr_cidr_merge, IPNetwork
+from netaddr import IPNetwork, IPRange, IPAddress, iprange_to_cidrs, spanning_cidr
 import logging
 import os
 import json
@@ -50,7 +50,8 @@ class SpammerBlock:
         self._datasource = datasource
 
     def whois_query(self, ip, asn: str = None,
-                    asn_json_result_file: str = None) -> Tuple[int, Union[None, dict]]:
+                    asn_json_result_file: str = None,
+                    allow_non_exact_merge: bool = False) -> Tuple[int, Union[None, dict]]:
         """
         Query networks contained in an AS-number.
         During post-processing make the networks as big as possible without overlap.
@@ -58,6 +59,7 @@ class SpammerBlock:
         :param asn: (optional, not needed if ASN given) AS-number to query for
         :param asn_json_result_file: If file exists, short-circuit and read previous query result from this file.
                                      If file not exist, query and write result to this file as JSON for next use.
+        :param allow_non_exact_merge: don't require exact match on merge, resulting merged network will be inaccurate
         :return: tuple: int AS-number, dict of networks, key =
         """
         if not asn:
@@ -77,7 +79,7 @@ class SpammerBlock:
             return asn, None
 
         nets_data = self._process_asn_list(asn, asn_result, ip_result)
-        net_data_out = self._post_process_asn_result(nets_data)
+        net_data_out = self._post_process_asn_result(nets_data, allow_non_exact_merge)
 
         return asn, net_data_out
 
@@ -206,7 +208,7 @@ class SpammerBlock:
         return nets_data
 
     @staticmethod
-    def _post_process_asn_result(nets_data: dict) -> dict:
+    def _post_process_asn_result(nets_data: dict, allow_non_exact_merge: bool) -> dict:
         log.debug("_post_process_asn_result(): Begin")
 
         # 1) Keep the list of CIDRs in a sorted list.
@@ -230,14 +232,14 @@ class SpammerBlock:
 
         # Merge
         # Will result list of IPNetwork
-        ipv4_nets_merged = netaddr_cidr_merge(list(ipv4_nets_to_merge))
-        ipv6_nets_merged = netaddr_cidr_merge(list(ipv6_nets_to_merge))
-        del ipv4_nets_to_merge # IPNetwork-objects are not needed after this
+        ipv4_nets_merged = SpammerBlock.netaddr_cidr_merge([(net, True) for net in ipv4_nets_to_merge], allow_non_exact_merge)
+        ipv6_nets_merged = SpammerBlock.netaddr_cidr_merge([(net, True) for net in ipv6_nets_to_merge], allow_non_exact_merge)
+        del ipv4_nets_to_merge  # IPNetwork-objects are not needed after this
         del ipv6_nets_to_merge
 
         sorted_nets_set = set(sorted_nets)
-        ipv4_new_nets = [str(net.cidr) for net in ipv4_nets_merged if str(net.cidr) not in sorted_nets_set]
-        ipv6_new_nets = [str(net.cidr) for net in ipv6_nets_merged if str(net.cidr) not in sorted_nets_set]
+        ipv4_new_nets = [str(net[0].cidr) for net in ipv4_nets_merged if str(net[0].cidr) not in sorted_nets_set]
+        ipv6_new_nets = [str(net[0].cidr) for net in ipv6_nets_merged if str(net[0].cidr) not in sorted_nets_set]
 
         net_data_out = {}
 
@@ -245,7 +247,9 @@ class SpammerBlock:
 
         # Prepare the output data
         # 3.1) IPv4 networks
-        for net_to_check in ipv4_nets_merged:
+        for net_data in ipv4_nets_merged:
+            net_to_check = net_data[0]
+            net_is_exact = net_data[1]
             net_to_check_str = str(net_to_check.cidr)
             # Don't do those merged networks we've already done
             if net_to_check_str in net_data_out:
@@ -255,6 +259,7 @@ class SpammerBlock:
             if net_to_check_str not in ipv4_new_nets:
                 # Not a new net, not a merged net
                 net_data_out[net_to_check_str] = nets_data[net_to_check_str]
+                net_data_out[net_to_check_str]['exact'] = True
                 ipv4_nets_set.remove(net_to_check_obj)
                 continue
 
@@ -262,6 +267,7 @@ class SpammerBlock:
             net_data_out[net_to_check_str] = {
                 'desc': '',
                 'overlap': False,
+                'exact': net_is_exact,
                 'family': 4
             }
 
@@ -288,52 +294,144 @@ class SpammerBlock:
         log.debug("_post_process_asn_result(): IPv4 networks done")
 
         # 3.2) IPv6 networks
-        for net_to_check in ipv6_nets_merged:
+        for net_data in ipv6_nets_merged:
+            net_to_check = net_data[0]
+            net_is_exact = net_data[1]
+            net_to_check_str = str(net_to_check.cidr)
             # Don't do those merged networks we've already done
-            if net_to_check in net_data_out:
+            if net_to_check_str in net_data_out:
                 continue
 
             net_to_check_obj = IPv6Network(net_to_check)
-            if net_to_check in ipv6_new_nets:
-                # This is a "new" network formed by merging existing results.
-                net_data_out[net_to_check] = {
-                    'desc': '',
-                    'overlap': False,
-                    'family': 6
-                }
-
-                # Add the "old" networks the newly merged network shadows.
-                for other_net_to_check in ipv6_nets:
-                    net = str(other_net_to_check.cidr)
-                    if net == net_to_check:
-                        # No sense of matching same nets
-                        continue
-                    other_net_to_check_obj = IPv6Network(net)
-                    if net_to_check_obj.overlaps(other_net_to_check_obj):
-                        if net not in nets_data:
-                            log.warning("Internal: When checking merged net {}, "
-                                        "matching it with {} not found!".format(net_to_check, net)
-                                        )
-                            # import pprint
-                            # pp = pprint.PrettyPrinter(indent=4)
-                            # pp.pprint(net)
-                            # pp.pprint(other_net_to_check)
-                            # pp.pprint(nets_data)
-                            # raise Exception("Internal: %s not found!" % net)
-                            continue
-                        net_data_out[net] = nets_data[net]
-                        net_data_out[net]['overlap'] = net_to_check
-
-                # New network done, go for next one
+            if net_to_check_str not in ipv4_new_nets:
+                # Not a new net, not a merged net
+                net_data_out[net_to_check_str] = nets_data[net_to_check_str]
+                net_data_out[net_to_check_str]['exact'] = True
+                ipv6_nets_set.remove(net_to_check_obj)
                 continue
 
-            # Not a new net, not a merged net
-            net_data_out[net_to_check] = nets_data[net_to_check]
+            # This is a "new" network formed by merging existing results.
+            net_data_out[net_to_check] = {
+                'desc': '',
+                'overlap': False,
+                'exact': net_is_exact,
+                'family': 6
+            }
+
+            # Add the "old" networks the newly merged network shadows.
+            overlapping_nets = []
+            overlapping_descs = []
+            for other_net_to_check in ipv6_nets_set:
+                if net_to_check_obj.overlaps(other_net_to_check):
+                    overlapping_nets.append(other_net_to_check)
+                    net = other_net_to_check.with_prefixlen
+                    if net not in nets_data:
+                        # Note: IPv4 data seems to be accurate, IPv6 not
+                        log.warning("Internal: When checking merged net {}, "
+                                    "matching it with {} not found!".format(net_to_check, net)
+                                    )
+                        # import pprint
+                        # pp = pprint.PrettyPrinter(indent=4)
+                        # pp.pprint(net)
+                        # pp.pprint(other_net_to_check)
+                        # pp.pprint(nets_data)
+                        # raise Exception("Internal: %s not found!" % net)
+                        continue
+
+                    net_data_out[net] = nets_data[net]
+                    net_data_out[net]['overlap'] = net_to_check_str
+                    if nets_data[net]['desc']:
+                        overlapping_descs.append(nets_data[net]['desc'])
+
+            if overlapping_descs:
+                # Add only unique descriptions
+                net_data_out[net_to_check_str]['desc'] = ', '.join(list(set(overlapping_descs)))
+            for net_to_remove in overlapping_nets:
+                ipv6_nets_set.remove(net_to_remove)
+
+            # New network done, go for next one
 
         log.debug("_post_process_asn_result() IPv6 networks done")
         log.debug("_post_process_asn_result(): Ready")
 
         return net_data_out
+
+    @staticmethod
+    def netaddr_cidr_merge(ip_addrs: List[Tuple[IPNetwork, bool]],
+                           allow_non_exact_merge: bool) -> List[Tuple[IPNetwork, bool]]:
+        """
+        A function that accepts an iterable sequence of IP addresses and subnets
+        merging them into the smallest possible list of CIDRs. It merges adjacent
+        subnets where possible, those contained within others and also removes
+        any duplicates.
+
+        :param ip_addrs: an iterable sequence of IP addresses, subnets or ranges.
+        :param allow_non_exact_merge: don't require exact match on merge, resulting merged network will be inaccurate
+        :return: a summarized list of `IPNetwork` objects.
+        """
+        # The algorithm is quite simple: For each CIDR we create an IP range.
+        # Sort them and merge when possible.  Afterwars split them again
+        # optimally.
+
+        ranges = []
+
+        for ip_data in ip_addrs:
+            net = ip_data[0]
+            exactness = ip_data[1]
+            if not isinstance(net, IPNetwork):
+                raise ValueError("Expected IPNetwork-object as argument! Got {}".format(net.__class__))
+            # Since non-overlapping ranges are the common case, remember the original
+            ranges.append((
+                net.version,
+                net.last,
+                net.first,
+                exactness,
+                net
+            ))
+
+        ranges.sort()
+        i = len(ranges) - 1
+        while i > 0:
+            if ranges[i][0] == ranges[i - 1][0] and ranges[i][2] - 1 <= ranges[i - 1][1]:
+                ranges[i - 1] = (
+                    ranges[i][0],  # IP-version 4/6
+                    ranges[i][1],  # last address
+                    min(ranges[i - 1][2], ranges[i][2]),  # merged first address
+                    ranges[i - 1][3] and ranges[i][3]  # exactness of resulting merged network
+                    # original net object dropped
+                )
+                del ranges[i]
+            i -= 1
+        ranges_cnt = len(ranges)
+        merged = []
+        for range_tuple in ranges:
+            # If this range wasn't merged we can simply use the old cidr.
+            if len(range_tuple) == 5:
+                exactness = range_tuple[3]
+                original = range_tuple[4]
+                if isinstance(original, IPRange):
+                    merged.extend([(net, exactness) for net in original.cidrs()])
+                else:
+                    merged.append((original, exactness))
+            else:
+                version = range_tuple[0]
+                exactness = range_tuple[3]
+                range_start = IPAddress(range_tuple[2], version=version)
+                range_stop = IPAddress(range_tuple[1], version=version)
+                merged_nets = iprange_to_cidrs(range_start, range_stop)
+                if not allow_non_exact_merge or len(merged_nets) == 1:
+                    merged.extend([(net, exactness) for net in merged_nets])
+                    continue
+
+                # Approximations are allowed and needed. Rough results will be delivered.
+                # log.warning("Inefficient merge: {}/{}".format(len(merged) + 1, ranges_cnt))
+                merged_nets = spanning_cidr(merged_nets)
+                merged.append((merged_nets, False))
+
+        if not allow_non_exact_merge:
+            return merged
+
+        return SpammerBlock.netaddr_cidr_merge(merged, allow_non_exact_merge=False)
 
     @staticmethod
     def _ip_sort_helper(item) -> int:

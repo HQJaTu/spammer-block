@@ -59,6 +59,10 @@ def main():
                         default=True,
                         help="Don't display any overlapping subnets. Larger network will be merged "
                              "to hide smaller ones. Default: yes")
+    parser.add_argument('--allow-non-exact-overlapping', action="store_true",
+                        default=False,
+                        help="When merging overlapping, reduce number of networks by allowing non-exact merge. "
+                             "Default: no")
     parser.add_argument('--output-format', '-o', default='postfix',
                         help='Output format. Choices: ' +
                              ', '.join(NET_LIST_OUTPUT_OPTIONS) + "\n" +
@@ -97,7 +101,8 @@ def main():
     spammer_blocker = SpammerBlock(ds)
     asn, nets_for_as = spammer_blocker.whois_query(args.ip,
                                                    asn=args.asn,
-                                                   asn_json_result_file=args.asn_result_json_file)
+                                                   asn_json_result_file=args.asn_result_json_file,
+                                                   allow_non_exact_merge=args.allow_non_exact_overlapping)
 
     # Go output
     output_formatter_class = NET_LIST_OUTPUT_OPTIONS.get(args.output_format, NetworkOutputNone)
