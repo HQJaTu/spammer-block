@@ -13,7 +13,7 @@
     "license": "GPLv2",
     "name": "spammer-block",
     "summary": "Tool to get CIDRs of a known spammer IP-address by AS-number and report known spam automatically",
-    "version": "0.8.1",
+    "version": "0.8.2",
     "release": "1"
   },
   "python_venv": {
@@ -33,6 +33,9 @@
       "2) Automated reporting of spam based on user interaction or block-list"
     ],
     "changelog": [
+      "* Mon Feb 13 2023 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.2-1",
+      "- Performance improvement when there are many networks to process",
+      "- Added option to merge networks with less accuracy",
       "* Sun Feb 05 2023 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.1-1",
       "- Bumped Python package certifi to a secure version",
       "* Wed Sep 28 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.0-1",
