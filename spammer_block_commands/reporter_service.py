@@ -31,7 +31,7 @@ import asyncio
 import asyncio_glib
 import re
 import logging
-from systemd.journal import JournaldLogHandler
+from cysystemd.journal import JournaldLogHandler
 from spammer_block_lib import dbus, ConfigReader
 
 log = logging.getLogger(__name__)
@@ -77,6 +77,7 @@ def _setup_logger(log_level_in: str, watchdog=False) -> None:
 def gather_mailboxes_to_watch(maildir_base: str, force_root_override: bool, use_sssd: bool) -> list:
     dirs_out = []
     i_am = os.geteuid()
+    user_watchlist_cnt = 0
     if i_am == 0 or force_root_override:
         users_to_check = []
         if use_sssd:
@@ -95,8 +96,16 @@ def gather_mailboxes_to_watch(maildir_base: str, force_root_override: bool, use_
     for uid in users_to_check:
         user, users_watchlist = _check_for_config_file(maildir_base, uid)
         if users_watchlist:
+            user_watchlist_cnt += 1
             log.info("Found directories to watch for user ID {} ({})".format(uid, user))
             dirs_out.extend(users_watchlist)
+
+    if dirs_out:
+        log.debug("After checking for {} users, found {} users with directories to watch.".format(
+            len(users_to_check), user_watchlist_cnt
+        ))
+    else:
+        log.warning("After checking for {} users, didn't find any directories to watch.".format(len(users_to_check)))
 
     return dirs_out
 

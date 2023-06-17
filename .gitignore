@@ -4,6 +4,7 @@ systemd.service/SElinux/*.pp
 
 # RPM
 rpm.json
+*.rpm
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

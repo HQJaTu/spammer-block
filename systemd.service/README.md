@@ -170,7 +170,7 @@ See subdirectory `SElinux/` for details.
 ```bash
 runcon system_u:system_r:spammerblock_t:s0 \
   /usr/libexec/spammer-block/bin/python \
-  /usr/libexec/spammer-block/bin/spammer-reporter-service.py \
+  spammer_block_commands/reporter_service.py \
   system \
   --config /etc/sysconfig/spammer-reporter.toml
 ```

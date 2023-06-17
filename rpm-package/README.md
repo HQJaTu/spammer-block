@@ -9,11 +9,14 @@ There are two separate packages.
 3. `. venv.rpmvenv/bin/activate`
 4. `pip install rpmvenv`
 5. `pip install rpmvenv-macros`
-6. Prep done! 
+6. Install dependency libraries:
+    *     dnf install cairo-devel gobject-introspection-devel \
+            cairo-gobject-devel dbus-devel
+7. Prep done!
 
 ### Package
 1. Run this in package root directory, see: `ln -s rpm-package/rpm.json .`
-2. `rpmvenv rpm.json`
+2. `rpmvenv rpm.json`--verbose
 3. Wait for brand new `.rpm` to appear.
 4. Done! `rpm --install` the resulting package.
 
@@ -26,8 +29,9 @@ through any/all arguments given.
 Producing RPM from SElinux-policy is done traditionally.
 
 ### Prep
-1. Install package _rpm-build_
-2. Make sure _make_ is installed
+1. Install dependency libraries:
+    *     dnf install rpm-build selinux-policy-devel
+2. Make sure package _make_ is installed
 3. Make sure your `rpmbuild/` directory tree exists
 
 ### Package

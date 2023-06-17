@@ -1,5 +1,5 @@
 asyncinotify==2.0.2
-certifi==2022.12.7
+certifi==2023.5.7
 charset-normalizer==2.0.12
 dbus-python==1.2.18
 dnspython==2.0.0
@@ -12,7 +12,7 @@ pycairo==1.21.0
 PyGObject==3.42.2
 python-systemd==0.0.9
 requests==2.27.1
-systemd==0.16.1
+systemd==0.17.1
 systemd-watchdog==0.9.0
+cysystemd==1.5.4
 toml==0.10.2
-urllib3==1.26.8
