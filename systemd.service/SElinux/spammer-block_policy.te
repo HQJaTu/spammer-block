@@ -33,6 +33,11 @@ require {
     type tmp_t;
     type syslogd_var_run_t;
     type node_t;
+    type proc_t;
+    type sysfs_t;
+    type systemd_userdbd_t;
+    type systemd_userdbd_runtime_t;
+    type cert_t;
 
     # Noise:
     type abrt_etc_t;
@@ -98,9 +103,25 @@ miscfiles_read_localization(spammerblock_t)
 allow spammerblock_t self:capability { dac_read_search };
 allow spammerblock_t self:tcp_socket { bind connect create read write };
 
+# Core functionality
+allow spammerblock_t proc_t:file { read open };
+allow spammerblock_t sysfs_t:file { read open };
+allow spammerblock_t var_run_t:dir { open read write };
+allow spammerblock_t cert_t:dir { search };
+allow spammerblock_t cert_t:file { open read getattr };
+allow spammerblock_t hugetlbfs_t:dir { open read write };
+
+# Enables SELinux domain transitions to occur under no_new_privs (NNP).
+# Explanation:
+# NNP states "No new privileges!", however, during SElinux context transition
+# from spammerblock_exec_t to spammerblock_t, the process will counter-intitively
+# gain new privileges. We need to allow this one-time privilege escalation.
+allow init_t spammerblock_t:process2 nnp_transition;
+
 # D-Bus
 allow spammerblock_t self:unix_dgram_socket { create getattr getopt setopt write };
 allow spammerblock_t system_dbusd_var_run_t:dir { search };
+allow spammerblock_t system_dbusd_var_run_t:sock_file { write };
 allow spammerblock_t system_dbusd_t:dbus { acquire_svc send_msg };
 allow spammerblock_t system_dbusd_t:unix_stream_socket { connectto sendto };
 allow spammerblock_t init_t:dbus { send_msg };
@@ -109,6 +130,7 @@ allow spammerblock_t self:dbus { send_msg };
 
 # D-Bus: Systemd watchdog
 allow spammerblock_t kernel_t:unix_dgram_socket { sendto };
+allow spammerblock_t kernel_t:unix_stream_socket { connectto };
 
 # Users:
 allow spammerblock_t sssd_t:unix_stream_socket { connectto };
@@ -117,10 +139,14 @@ allow spammerblock_t sssd_var_lib_t:sock_file { write };
 allow spammerblock_t sssd_public_t:dir { search };
 allow spammerblock_t sssd_public_t:file { getattr open read map };
 allow spammerblock_t passwd_file_t:file { getattr open read };
+allow spammerblock_t systemd_userdbd_t:unix_stream_socket { connectto };
+allow spammerblock_t systemd_userdbd_runtime_t:dir { open read getattr search };
+allow spammerblock_t systemd_userdbd_runtime_t:lnk_file { read };
+allow spammerblock_t systemd_userdbd_runtime_t:sock_file { write };
 
 # Users' homedirs:
 allow spammerblock_t user_home_dir_t:dir { getattr search };
-allow spammerblock_t user_home_t:dir { getattr read search };
+allow spammerblock_t user_home_t:dir { open read watch getattr search };
 allow spammerblock_t user_home_t:file { ioctl open read };
 allow spammerblock_t user_home_t:lnk_file { read };
 
@@ -129,6 +155,7 @@ allow spammerblock_t user_devpts_t:chr_file { append read write getattr ioctl };
 
 # Jourlnald
 allow spammerblock_t syslogd_var_run_t:dir { search };
+allow spammerblock_t syslogd_var_run_t:sock_file { write };
 allow spammerblock_t node_t:tcp_socket { node_bind };
 
 # Send mail via SMTP
@@ -136,9 +163,10 @@ allow spammerblock_t net_conf_t:file { getattr open read };
 allow spammerblock_t smtp_port_t:tcp_socket { name_connect };
 
 # GlibC requires access to /tmp
-allow spammerblock_t tmp_t:file { map create unlink write execute };
+allow spammerblock_t tmp_t:file { open map create unlink write execute };
 allow spammerblock_t tmp_t:dir { add_name remove_name write };
 allow spammerblock_t tmpfs_t:dir { write };
+allow spammerblock_t tmpfs_t:file { open read write map execute };
 
 
 # Noise:
@@ -181,5 +209,4 @@ dontaudit spammerblock_t tmpfs_t:dir { getattr search };
 dontaudit spammerblock_t unlabeled_t:dir { getattr search };
 dontaudit spammerblock_t user_tmp_t:dir { getattr search };
 dontaudit spammerblock_t var_lib_nfs_t:dir { getattr search };
-dontaudit spammerblock_t var_run_t:dir { getattr search };
 dontaudit spammerblock_t var_t:dir { getattr search };
