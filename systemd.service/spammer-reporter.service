@@ -21,13 +21,14 @@ CPUSchedulingPriority=1
 ProtectSystem=strict
 PrivateDevices=true
 ProtectControlGroups=true
-# Cannot protect homes as they may contain mail!
+# NOTE: Cannot protect homes as they may contain mail!
 #ProtectHome=true
 PrivateTmp=true
 
 # Network
-PrivateNetwork=true
-RestrictAddressFamilies=AF_UNIX AF_LOCAL AF_NETLINK
+# NOTE: Need system services, like SMTPd in TCP/25
+#PrivateNetwork=true
+RestrictAddressFamilies=AF_UNIX AF_LOCAL AF_NETLINK AF_INET AF_INET6
 
 # Execute Mappings
 MemoryDenyWriteExecute=true

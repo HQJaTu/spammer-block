@@ -17,6 +17,7 @@
 # Copyright (c) Jari Turkia
 
 import os
+import sys
 import smtplib
 from typing import Union
 from email.mime.application import MIMEApplication
@@ -33,7 +34,7 @@ class MailReporterAbstract(ReporterAbstract):
 
     def __init__(self, send_from: str, send_to: Union[str, list], host: str):
         """
-        Send spam report to SpamCop using local SMTPd
+        Send spam report to SpamCop or similar service via SMTP using local SMTPd
         :param send_from: mail sender, mostly irrelevant and not used
         :param send_to: reporting address
         :param host: hostname or IP-address to use for sending
@@ -96,6 +97,18 @@ class MailReporterAbstract(ReporterAbstract):
         return msg
 
     def _send_message(self, msg: MIMEMultipart) -> None:
+        log.debug("SMTP server: {}".format(self.mail_server))
         smtp = smtplib.SMTP(self.mail_server)
+        log.debug("SMTP mail from: {}".format(self.send_from))
+        log.debug("SMTP mail to: {}".format(self.send_to))
         smtp.sendmail(self.send_from, self.send_to, msg.as_string())
         smtp.close()
+        log.debug("SMTP send ok")
+
+    @staticmethod
+    def _audit_hook(event, args):
+        if event == "smtplib.connect":
+            log.debug("smtplib.connect called with args: {}".format(args))
+
+
+sys.addaudithook(MailReporterAbstract._audit_hook)

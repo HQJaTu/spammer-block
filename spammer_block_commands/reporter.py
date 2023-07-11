@@ -92,7 +92,7 @@ def dbus_reporter(use_system_bus: bool, filename: str) -> None:
         return
 
     # Report spam
-    log.debug("Sending ReportFile({}) into D-Bus {}".format(filename, SPAM_REPORTER_SERVICE_BUS_NAME))
+    log.debug("Sending ReportFile({}) into D-Bus {} by manual request".format(filename, SPAM_REPORTER_SERVICE_BUS_NAME))
     reply = iface.ReportFile(filename)
     log.debug("Response: {}".format(reply))
 

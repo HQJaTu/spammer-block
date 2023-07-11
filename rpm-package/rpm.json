@@ -14,7 +14,7 @@
     "name": "spammer-block",
     "summary": "Tool to get CIDRs of a known spammer IP-address by AS-number and report known spam automatically",
     "version": "0.8.3",
-    "release": "1"
+    "release": "2"
   },
   "python_venv": {
     "cmd": "python3 -m venv",
@@ -35,6 +35,9 @@
       "2) Automated reporting of spam based on user interaction or block-list"
     ],
     "changelog": [
+      "* Thu Jul 11 2023 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.3-2",
+      "- Logging improvements to match best practices.",
+      "- Bugfix: Allow SMTP reporting.",
       "* Thu Jun 15 2023 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.3-1",
       "- Packaging for Python 3.11. Bumped versions.",
       "* Mon Feb 13 2023 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.2-1",

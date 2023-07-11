@@ -80,6 +80,7 @@ require {
     type var_lib_nfs_t;
     type var_run_t;
     type var_t;
+    type systemd_machined_t;
 
     # Classes used
     class file { execute setattr read lock create execute_no_trans write getattr unlink append };
@@ -160,7 +161,9 @@ allow spammerblock_t node_t:tcp_socket { node_bind };
 
 # Send mail via SMTP
 allow spammerblock_t net_conf_t:file { getattr open read };
+allow spammerblock_t net_conf_t:lnk_file { read };
 allow spammerblock_t smtp_port_t:tcp_socket { name_connect };
+allow spammerblock_t systemd_machined_t:unix_stream_socket { connectto };
 
 # GlibC requires access to /tmp
 allow spammerblock_t tmp_t:file { open map create unlink write execute };

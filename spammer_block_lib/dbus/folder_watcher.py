@@ -255,7 +255,7 @@ class FolderWatcher:
 
         # As this single-thread process cannot send AND receive, send from an async task.
         # Note: This particular async-task is a Glib one, not asyncio.
-        log.debug("Sending ReportFile({}) into D-Bus {}".format(filename, SPAM_REPORTER_SERVICE_BUS_NAME))
+        log.debug("Sending detected ReportFile({}) into D-Bus {}".format(filename, SPAM_REPORTER_SERVICE_BUS_NAME))
         self._spammer_reporter_service_iface.ReportFile(filename,
                                                         reply_handler=self._dbus_reporter_reply_handler,
                                                         error_handler=self._dbus_reporter_error_handler,

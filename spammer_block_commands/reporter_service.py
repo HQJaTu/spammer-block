@@ -60,18 +60,26 @@ def _setup_logger(log_level_in: str, watchdog=False) -> None:
         handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(log_formatter)
     handler.propagate = False
-    log.handlers.clear()
-    log.addHandler(handler)
 
     if log_level_in.upper() not in logging._nameToLevel:
         raise ValueError("Unkown logging level '{}'!".format(log_level_in))
     log_level = logging._nameToLevel[log_level_in.upper()]
-    log.setLevel(log_level)
+    #log_level = logging.getLevelName(log_level_in.upper())
 
-    lib_log = logging.getLogger('spammer_block_lib')
-    lib_log.setLevel(log_level)
-    lib_log.handlers.clear()
-    lib_log.addHandler(handler)
+    if False:
+        log.handlers.clear()
+        log.addHandler(handler)
+
+        log.setLevel(log_level)
+
+        lib_log = logging.getLogger('spammer_block_lib')
+        lib_log.handlers.clear()
+        lib_log.addHandler(handler)
+        lib_log.setLevel(log_level)
+    root_logger = logging.getLogger('')
+    root_logger.handlers.clear()
+    root_logger.addHandler(handler)
+    root_logger.setLevel(log_level)
 
 
 def gather_mailboxes_to_watch(maildir_base: str, force_root_override: bool, use_sssd: bool) -> list:
