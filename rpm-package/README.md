@@ -9,13 +9,14 @@ There are two separate packages.
 3. `. venv.rpmvenv/bin/activate`
 4. `pip install rpmvenv`
 5. `pip install rpmvenv-macros`
-6. Install dependency libraries:
+6. `pip install setuptools`
+7. Install dependency libraries:
     *     dnf install cairo-devel gobject-introspection-devel \
             cairo-gobject-devel dbus-devel
-7. Prep done!
+8. Prep done!
 
 ### Package
-1. Run this in package root directory, see: `ln -s rpm-package/rpm.json .`
+1. Run this in package root directory, see previously run: `ln -s rpm-package/rpm.json .`
 2. `rpmvenv rpm.json`--verbose
 3. Wait for brand new `.rpm` to appear.
 4. Done! `rpm --install` the resulting package.
