@@ -38,6 +38,7 @@ dependencies = [
     "cysystemd==1.6.2",
     "toml==0.10.2",
     "asyncio-glib==0.1",
+    "ConfigArgParse==1.7",
 ]
 
 [tool.setuptools.package-dir]

@@ -20,7 +20,7 @@
 
 
 import sys
-import argparse
+import configargparse
 import logging
 from spammer_block_lib import *
 from spammer_block_lib import datasources
@@ -49,8 +49,9 @@ def _setup_logger(log_level_in: str) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Block IP-ranges of a spammer',
-                                     formatter_class=argparse.RawTextHelpFormatter)
+    parser = configargparse.ArgumentParser(description='Block IP-ranges of a spammer',
+                                     formatter_class=configargparse.RawTextHelpFormatter,
+                                     default_config_files=['/etc/spammer-block/blocker.conf', '~/.spammer-blocker'])
     parser.add_argument('ip', metavar="IP",
                         help='IPv4 address to query for')
     parser.add_argument('--asn', '-a',
@@ -88,14 +89,16 @@ def main():
                              'Dynamic AS-number assignment with "{}".'.format(
                             SpammerBlock.DYNAMIC_AS_NUMBER_REPLACEMENT
                         ))
+    parser.add_argument("-c", "--config-file",
+                        is_config_file=True,
+                        help="Specify config file", metavar="FILE")
     args = parser.parse_args()
 
     _setup_logger(args.log_level)
 
     # Select datasource
     # ds = datasources.RADb(args.ip)
-    ds = datasources.IPInfoIO_UI()
-    # ds = datasources.IPInfoIO(args.ip, token=args.ipinfo_token)
+    ds = datasources.IPInfoIO(args.ip, token=args.ipinfo_token)
 
     # Go process
     spammer_blocker = SpammerBlock(ds)

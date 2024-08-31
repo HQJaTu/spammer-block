@@ -1,6 +1,5 @@
-from typing import Union
+from typing import Optional
 import requests
-import re
 import logging
 from ..datasource_base import DatasourceBase
 
@@ -19,6 +18,7 @@ class IPInfoIO_UI(DatasourceBase):
 
     def __init__(self):
         self._session = None
+        log.warning("IPinfo.io doesn't respond to queries without logged in user. To-do: Implement UI login.")
 
     def _get_session(self) -> requests.Session:
         if self._session:
@@ -28,7 +28,7 @@ class IPInfoIO_UI(DatasourceBase):
 
         return self._session
 
-    def lookup(self, as_number: int) -> Union[None, dict]:
+    def lookup(self, as_number: int) -> Optional[dict]:
         url = self.ASN_QUERY_URL.format(as_number)
         log.info("IPinfo.io UI: Query AS{0} via '{1}'".format(as_number, url))
         sess = self._get_session()
@@ -41,7 +41,7 @@ class IPInfoIO_UI(DatasourceBase):
                 log.error("IPinfo.io free queries exhausted for today!")
                 return None
 
-            log.warning("IPinfo.io query returned HTTP/{0}!".format(response.status_code))
+            log.warning("IPinfo.io query returned HTTP/{}! Returning no data.".format(response.status_code))
             return None
 
         data = response.json()
