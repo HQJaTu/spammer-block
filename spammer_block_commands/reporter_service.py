@@ -66,16 +66,6 @@ def _setup_logger(log_level_in: str, watchdog=False) -> None:
     log_level = logging._nameToLevel[log_level_in.upper()]
     #log_level = logging.getLevelName(log_level_in.upper())
 
-    if False:
-        log.handlers.clear()
-        log.addHandler(handler)
-
-        log.setLevel(log_level)
-
-        lib_log = logging.getLogger('spammer_block_lib')
-        lib_log.handlers.clear()
-        lib_log.addHandler(handler)
-        lib_log.setLevel(log_level)
     root_logger = logging.getLogger('')
     root_logger.handlers.clear()
     root_logger.addHandler(handler)
