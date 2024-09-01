@@ -1,4 +1,4 @@
-#!/home/jmjt/python/spammer-block/venv.rpmvenv/bin/python
+#!/usr/libexec/spammer-block/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys
