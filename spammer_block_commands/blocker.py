@@ -81,8 +81,10 @@ def main():
     parser.add_argument('--log-level', default="WARNING",
                         help='Set logging level (CRITICAL, FATAL, ERROR, WARNING, INFO, DEBUG). '
                              'Python default is: WARNING')
-    parser.add_argument('--ipinfo-token', default=None,
-                        help='ipinfo.io API access token if using paid ASN query service')
+    parser.add_argument('--ipinfo-token',
+                        help='ipinfo.io API access token for using paid ASN query service')
+    parser.add_argument('--ipinfo-db-file',
+                        help='ipinfo.io ASN DB file')
     parser.add_argument('--asn-result-json-file',
                         help='To conserve ASN-queries, save query result\n'
                              'or use existing result from a previous query.\n'
@@ -97,8 +99,8 @@ def main():
     _setup_logger(args.log_level)
 
     # Select datasource
-    # ds = datasources.RADb(args.ip)
-    ds = datasources.IPInfoIO(args.ip, token=args.ipinfo_token)
+    #ds = datasources.RADb(args.ip)
+    ds = datasources.IPInfoIO(args.ip, token=args.ipinfo_token, db_file=args.ipinfo_db_file)
 
     # Go process
     spammer_blocker = SpammerBlock(ds)

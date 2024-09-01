@@ -20,7 +20,7 @@ __author__ = 'Jari Turkia'
 __email__ = 'jatu@hqcodeshop.fi'
 __url__ = 'https://blog.hqcodeshop.fi/'
 __git__ = 'https://github.com/HQJaTu/'
-__version__ = '0.5'
+__version__ = '0.8'
 __license__ = 'GPLv2'
 __banner__ = 'cert_check_lib v{} ({})'.format(__version__, __git__)
 
@@ -121,33 +121,31 @@ class SpammerBlock:
                     asn_data = json.load(json_file)
 
                 # Sanity
-                if 'asn' not in asn_data:
-                    raise Exception("Invalid JSON-data read. Not valid ASN information!")
-                if asn_data['asn'] != 'AS{}'.format(asn):
+                if 'asn' in asn_data:
+                    # We have ipwhois.asn.IPASN result set
+                    cached_asn = asn_data['asn']
+                else:
+                    if 'query' in asn_data:
+                        # We have ipwhois.asn.ASNOrigin result set
+                        cached_asn = asn_data['query']
+                    else:
+                        raise Exception("Invalid JSON-data read. Not valid ASN information!")
+                if cached_asn != 'AS{}'.format(asn):
                     raise Exception(
-                        "Invalid JSON-data read. This is for {}, expected AS{}!".format(asn_data['asn'], asn))
-                if 'prefixes' not in asn_data:
-                    raise Exception("Invalid JSON-data read. Not valid ASN information!")
+                        "Invalid JSON-data read. This is for {}, expected AS{}!".format(cached_asn, asn))
+                if 'nets' not in asn_data:
+                    raise Exception("Invalid JSON-data read. Not valid Spammer-block cached ASN information!")
                 asn_result = {
-                    'nets': []
+                    'nets': asn_data['nets']
                 }
-                for net_info in asn_data['prefixes']:
-                    prefix = net_info["netblock"]
-                    net_name = net_info["name"]
-                    net_info_out = {
-                        'cidr': prefix,
-                        'description': net_name
-                    }
-                    asn_result['nets'].append(net_info_out)
 
                 return asn_result
 
-        # Note: IP-address really isn't a factor here, but IPWhoisASNOrigin class requires a net.
-        #       Any net will do for ASN-queries.
-        # net = IPWhoisNet(ip, allow_permutations=False)
+        # Cache miss.
+        # Go query.
         asn_result = self._datasource.lookup(asn)
 
-        # Don't save nothingness.
+        # Save if saving was requested and there is data to save.
         if asn_result and asn_json_result_file_to_use:
             log.info("Writing ASN JSON result file {}.".format(asn_json_result_file_to_use))
             with open(asn_json_result_file_to_use, "w") as asn_result_file:
