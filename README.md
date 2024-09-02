@@ -40,23 +40,26 @@ Limit: A non-paid API of ipinfo.ip will serve 5 ASN-queries / day / IP-address.
 ## Usage
 * Spammer block:
 ```text
-usage: spammer-block.py [-h] [--asn ASN] [--skip-overlapping]
-                        [--output-format OUTPUT_FORMAT]
-                        [--output-file OUTPUT_FILE]
-                        [--postfix-rule POSTFIX_RULE] [--log-level LOG_LEVEL]
-                        [--ipinfo-token IPINFO_TOKEN]
-                        [--asn-result-json-file ASN_RESULT_JSON_FILE]
-                        IP
+usage: spammer-blocker [-h] [--asn ASN] [--skip-overlapping]
+                       [--allow-non-exact-overlapping] [--output-format OUTPUT_FORMAT]
+                       [--output-file OUTPUT_FILE] [--postfix-rule POSTFIX_RULE]
+                       [--log-level LOG_LEVEL] [--ipinfo-token IPINFO_TOKEN]
+                       [--ipinfo-db-file IPINFO_DB_FILE]
+                       [--asn-result-json-file ASN_RESULT_JSON_FILE] [-c FILE]
+                       IP
 
 Block IP-ranges of a spammer
 
 positional arguments:
   IP                    IPv4 address to query for
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --asn ASN, -a ASN     Skip querying for ASN
-  --skip-overlapping    Don't display any overlapping subnets. Default: yes
+  --skip-overlapping, --merge-overlapping
+                        Don't display any overlapping subnets. Larger network will be merged to hide smaller ones. Default: yes
+  --allow-non-exact-overlapping
+                        When merging overlapping, reduce number of networks by allowing non-exact merge. Default: no
   --output-format OUTPUT_FORMAT, -o OUTPUT_FORMAT
                         Output format. Choices: none, json, postfix
                         Default: "postfix" will produce Postfix CIDR-table
@@ -68,13 +71,23 @@ optional arguments:
                         Default: "554 Go away spammer!"
                         Example: "PREPEND X-Spam-ASN: AS{ASN}"
   --log-level LOG_LEVEL
-                        Set logging level. Python default is: WARNING
+                        Set logging level (CRITICAL, FATAL, ERROR, WARNING, INFO, DEBUG). Python default is: WARNING
   --ipinfo-token IPINFO_TOKEN
-                        ipinfo.io API access token if using paid ASN query service
+                        ipinfo.io API access token for using paid ASN query service
+  --ipinfo-db-file IPINFO_DB_FILE
+                        ipinfo.io ASN DB file
   --asn-result-json-file ASN_RESULT_JSON_FILE
                         To conserve ASN-queries, save query result
                         or use existing result from a previous query.
                         Dynamic AS-number assignment with "{ASN}".
+  -c FILE, --config-file FILE
+                        Specify config file
+
+Args that start with '--' can also be set in a config file (/etc/spammer-
+block/blocker.conf or ~/.spammer-blocker or specified via -c). Config file syntax
+allows: key=value, flag=true, stuff=[a,b,c] (for details, see syntax at
+https://goo.gl/R74nmi). In general, command-line values override config file values
+which override defaults.
 ```
 
 ## Postfix configuration
@@ -89,6 +102,9 @@ smtpd_client_restrictions =
 ```
 
 File `/etc/postfix/client_checks.cidr` will contain listings of all known spammers' networks.
+
+## Configuration File
+
 
 ## Example:
 
@@ -132,35 +148,33 @@ fighting against spam. An example of one would be [SpamCop](https://www.spamcop.
 
 ## Usage
 ```text
-usage: spammer-reporter.py [-h] [--from-address FROM_ADDRESS]
-                           [--smtpd-address SMTPD_ADDRESS]
-                           [--spamcop-report-address REPORT-ADDRESS]
-                           [--mock-report-address REPORT-ADDRESS]
-                           [--report-from-stdin] [--report-from-file FILENAME]
-                           [--dbus BUS-TYPE-TO-USE] [--log-level LOG_LEVEL]
-                           [--config-file TOML-CONFIGURATION-FILE]
+usage: spammer-reporter [-h] [--from-address FROM_ADDRESS]
+                        [--smtpd-address SMTPD_ADDRESS]
+                        [--spamcop-report-address REPORT-ADDRESS]
+                        [--mock-report-address REPORT-ADDRESS] [--report-from-stdin]
+                        [--report-from-file FILENAME] [--dbus BUS-TYPE-TO-USE]
+                        [--log-level LOG_LEVEL] [--config-file TOML-CONFIGURATION-FILE]
 
 Report received email as spam
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --from-address FROM_ADDRESS
-                        Send mail to Spamcop using given sender address.
-                        Default: joe.user@example.com
+                        Send mail to Spamcop using given sender address. Default:
+                        joe.user@example.com
   --smtpd-address SMTPD_ADDRESS
                         Send mail using SMTPd at address. Default: 127.0.0.1
   --spamcop-report-address REPORT-ADDRESS
                         Report to Spamcop using given address
   --mock-report-address REPORT-ADDRESS
-                        Report to given e-mail address. Simulate reporting for
-                        test purposes.
+                        Report to given e-mail address. Simulate reporting for test
+                        purposes.
   --report-from-stdin   Read email from STDIN and report it as spam
   --report-from-file FILENAME
                         Read email from a RFC2822 file and report it as spam
   --dbus BUS-TYPE-TO-USE
-                        Use D-Bus for reporting. Ignoring all arguments,
-                        except must use --report-from-file. Choices: system,
-                        session
+                        Use D-Bus for reporting. Ignoring all arguments, except must use
+                        --report-from-file. Choices: system, session
   --log-level LOG_LEVEL
                         Set logging level. Python default is: WARNING
   --config-file TOML-CONFIGURATION-FILE
