@@ -32,7 +32,7 @@ dependencies = [
     "pycairo==1.26.1",
     "PyGObject==3.48.2",
     "python-systemd==0.0.9",
-    "requests==2.32.3",
+    "requests==2.32.2",
     "systemd==0.17.1",
     "systemd-watchdog==0.9.0",
     "cysystemd==1.6.2",
