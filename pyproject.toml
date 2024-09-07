@@ -26,7 +26,7 @@ dependencies = [
     "dnspython==2.6.1",
     "gbulb==0.6.5",
     "gobject==0.1.0",
-    "idna==3.8",
+    "idna==3.7",
     "ipwhois @ git+https://github.com/HQJaTu/ipwhois.git@ipinfo.io",
     "netaddr==1.3.0",
     "pycairo==1.26.1",
