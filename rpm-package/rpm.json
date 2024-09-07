@@ -36,7 +36,7 @@
       "2) Automated reporting of spam based on user interaction or block-list"
     ],
     "changelog": [
-      "* Mon Sep 02 2024 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.5-1",
+      "* Sat Sep 07 2024 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.5-1",
       "- Using only one type of configuration file.",
       "* Sun Sep 01 2024 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.4-1",
       "- Improved IPinfo.io ASN data retrieval.",

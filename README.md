@@ -104,7 +104,9 @@ smtpd_client_restrictions =
 File `/etc/postfix/client_checks.cidr` will contain listings of all known spammers' networks.
 
 ## Configuration File
+ConfigArgParse Pypi page: https://goo.gl/R74nmi
 
+Any configuration option with `--` can be specified in a simple key-value configuration file.
 
 ## Example:
 

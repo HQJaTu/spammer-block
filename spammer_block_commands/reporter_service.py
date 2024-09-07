@@ -32,7 +32,7 @@ import asyncio_glib
 import re
 import logging
 from cysystemd.journal import JournaldLogHandler
-from spammer_block_lib import dbus, ConfigReader
+from spammer_block_lib import dbus
 
 log = logging.getLogger(__name__)
 wd: watchdog = None
@@ -236,7 +236,7 @@ def main() -> None:
                         help="Send mail to Spamcop using given sender address. Default: {}".format(
                             DEFAULT_FROM_ADDRESS))
     parser.add_argument('--smtpd-address', default=DEFAULT_SMTPD_ADDRESS,
-                        help="Send mail using SMTPd at address. Default: {}".format(ConfigReader.DEFAULT_SMTPD_ADDRESS))
+                        help="Send mail using SMTPd at address. Default: {}".format(DEFAULT_SMTPD_ADDRESS))
     parser.add_argument('--spamcop-report-address', metavar="REPORT-ADDRESS",
                         help="Report to Spamcop using given address")
     parser.add_argument('--mock-report-address', metavar="REPORT-ADDRESS",
