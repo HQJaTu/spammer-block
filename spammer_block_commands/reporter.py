@@ -20,7 +20,7 @@
 
 import os
 import sys
-import argparse
+import configargparse
 import logging
 from spammer_block_lib import ConfigReader, reporter as spam_reporters
 
@@ -72,25 +72,6 @@ def dbus_reporter(use_system_bus: bool, filename: str) -> None:
     proxy = bus.get_object(SPAM_REPORTER_SERVICE_BUS_NAME, OPATH)
     iface = Interface(proxy, dbus_interface=SPAM_REPORTER_SERVICE_BUS_NAME)
 
-    if False:
-        # Ping test:
-        # call the methods and print the results
-        log.info("Sending Ping into D-Bus {}".format(SPAM_REPORTER_SERVICE_BUS_NAME))
-        reply = iface.Ping()
-        log.info("Response: {}".format(reply))
-
-        return
-    if False:
-        # Ping test:
-        ping_method = proxy.get_dbus_method('Ping', SPAM_REPORTER_SERVICE_BUS_NAME)
-
-        # call the methods and print the results
-        log.info("Sending Ping into D-Bus {}".format(SPAM_REPORTER_SERVICE_BUS_NAME))
-        reply = ping_method()
-        log.info("Response: {}".format(reply))
-
-        return
-
     # Report spam
     log.debug("Sending ReportFile({}) into D-Bus {} by manual request".format(filename, SPAM_REPORTER_SERVICE_BUS_NAME))
     reply = iface.ReportFile(filename)
@@ -98,7 +79,9 @@ def dbus_reporter(use_system_bus: bool, filename: str) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Report received email as spam')
+    parser = configargparse.ArgumentParser(description='Report received email as spam',
+                                           default_config_files=['/etc/spammer-block/reporter.conf',
+                                                                 '~/.spammer-reporter'])
     parser.add_argument('--from-address', default=DEFAULT_FROM_ADDRESS,
                         help="Send mail to Spamcop using given sender address. Default: {}".format(
                             DEFAULT_FROM_ADDRESS))
@@ -118,28 +101,11 @@ def main():
                             ', '.join([BUS_SYSTEM, BUS_SESSION])))
     parser.add_argument('--log-level', default="WARNING",
                         help='Set logging level. Python default is: WARNING')
-    parser.add_argument('--config-file',
-                        metavar="TOML-CONFIGURATION-FILE",
-                        help="Configuration Toml-file")
+    parser.add_argument("-c", "--config-file",
+                        is_config_file=True,
+                        help="Specify config file", metavar="FILE")
     args = parser.parse_args()
     _setup_logger(args.log_level)
-
-    # Read configuration?
-    if args.config_file:
-        if not os.path.exists(args.config_file):
-            log.error("Given configuration file '{}' doesn't exist!".format(args.config_file))
-            exit(2)
-        log.debug("Reading configuration from: {}".format(args.config_file))
-        config = ConfigReader.config_from_toml_file(args.config_file)
-    else:
-        config = ConfigReader.empty_config()
-
-    # Change log-level?
-    if (args.log_level == ConfigReader.DEFAULT_LOG_LEVEL and
-            config['Daemon']['log_level'] != ConfigReader.DEFAULT_LOG_LEVEL):
-        # --log-level not specified
-        # Toml-configuration has log-level specified. Re-do logging setup.
-        _setup_logger(config['Daemon']['log_level'])
 
     if args.dbus:
         if args.dbus == BUS_SYSTEM:
@@ -163,23 +129,18 @@ def main():
             parser.print_help()
             exit(1)
 
-        # Merge CLI-arguments
-        if args.from_address != ConfigReader.DEFAULT_FROM_ADDRESS:
-            config['Reporter']['from_address'] = args.from_address
-        if args.spamcop_report_address:
-            config['Reporter']['spamcop_report_address'] = args.spamcop_report_address
-        if args.smtpd_address != ConfigReader.DEFAULT_SMTPD_ADDRESS:
-            config['Reporter']['smtpd_address'] = args.smtpd_address
-
         # Mandatory argument(s) specified?
-        if config['Reporter']['spamcop_report_address']:
-            reporter = spam_reporters.SpamcopReporter(send_from=config['Reporter']['from_address'],
-                                                      send_to=config['Reporter']['spamcop_report_address'],
-                                                      host=config['Reporter']['smtpd_address'])
-        elif config['Reporter']['mock_report_address']:
-            reporter = spam_reporters.MockReporter(send_from=config['Reporter']['from_address'],
-                                                   send_to=config['Reporter']['mock_report_address'],
-                                                   host=config['Reporter']['smtpd_address'])
+        if not args.spamcop_report_address and not args.mock_report_address:
+            log.error("Need --spamcop-report-address or --mock-report-address (or --config)")
+            exit(2)
+        if args.spamcop_report_address:
+            reporter = spam_reporters.SpamcopReporter(send_from=args.from_address,
+                                                      send_to=args.spamcop_report_address,
+                                                      host=args.smtpd_address)
+        elif args.mock_report_address:
+            reporter = spam_reporters.MockReporter(send_from=args.from_address,
+                                                   send_to=args.mock_report_address,
+                                                   host=args.smtpd_address)
         else:
             log.error("Need --spamcop-report-address or --mock-report-address (or --config)")
             exit(2)

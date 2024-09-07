@@ -50,8 +50,9 @@ def _setup_logger(log_level_in: str) -> None:
 
 def main():
     parser = configargparse.ArgumentParser(description='Block IP-ranges of a spammer',
-                                     formatter_class=configargparse.RawTextHelpFormatter,
-                                     default_config_files=['/etc/spammer-block/blocker.conf', '~/.spammer-blocker'])
+                                           formatter_class=configargparse.RawTextHelpFormatter,
+                                           default_config_files=['/etc/spammer-block/blocker.conf',
+                                                                 '~/.spammer-blocker'])
     parser.add_argument('ip', metavar="IP",
                         help='IPv4 address to query for')
     parser.add_argument('--asn', '-a',
@@ -99,7 +100,7 @@ def main():
     _setup_logger(args.log_level)
 
     # Select datasource
-    #ds = datasources.RADb(args.ip)
+    # ds = datasources.RADb(args.ip)
     ds = datasources.IPInfoIO(args.ip, token=args.ipinfo_token, db_file=args.ipinfo_db_file)
 
     # Go process

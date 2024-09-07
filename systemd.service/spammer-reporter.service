@@ -3,7 +3,7 @@ Description=Report received spam email to SpamCop / GMail / SendGrid
 
 [Service]
 Environment="DBUS_TO_USE=system"
-Environment="CONFIG=/etc/sysconfig/spammer-reporter.toml"
+Environment="CONFIG=/etc/spammer-block/reporter.conf"
 ExecStart=/usr/libexec/spammer-block/bin/python /usr/libexec/spammer-block/bin/spammer-reporter-service $DBUS_TO_USE --config $CONFIG
 Type=notify
 CapabilityBoundingSet=CAP_AUDIT_WRITE CAP_DAC_READ_SEARCH CAP_IPC_LOCK CAP_SYS_NICE

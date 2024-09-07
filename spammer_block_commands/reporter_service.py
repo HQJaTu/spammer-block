@@ -24,7 +24,7 @@ import pwd
 import sys
 from systemd_watchdog import watchdog
 from typing import Optional, Tuple
-import argparse
+import configargparse
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
 import asyncio
@@ -41,6 +41,10 @@ BUS_SYSTEM = "system"
 BUS_SESSION = "session"
 
 DEFAULT_CONFIG_FILE_NAME = ".spammer-block"
+DEFAULT_FROM_ADDRESS = "joe.user@example.com"
+DEFAULT_SMTPD_ADDRESS = "127.0.0.1"
+DEFAULT_SYSTEMD_WATCHDOG_TIME = 5
+DEFAULT_LOG_LEVEL = "WARNING"
 
 
 def _setup_logger(log_level_in: str, watchdog=False) -> None:
@@ -64,7 +68,7 @@ def _setup_logger(log_level_in: str, watchdog=False) -> None:
     if log_level_in.upper() not in logging._nameToLevel:
         raise ValueError("Unkown logging level '{}'!".format(log_level_in))
     log_level = logging._nameToLevel[log_level_in.upper()]
-    #log_level = logging.getLevelName(log_level_in.upper())
+    # log_level = logging.getLevelName(log_level_in.upper())
 
     root_logger = logging.getLogger('')
     root_logger.handlers.clear()
@@ -177,17 +181,23 @@ def _systemd_mock_watchdog() -> bool:
     return True
 
 
-def monitor_dbus(use_system_bus: bool, config: dict, use_sssd: bool) -> None:
-    watchdog_time = config['Daemon']['watchdog_time']
-    maildir_base = config['Daemon']['maildir_base']
-    force_root_override = config['Daemon']['force_root_override']
-
+def monitor_dbus(use_system_bus: bool, watchdog_time: int, maildir_base: str, force_root_override: bool,
+                 from_address: str, spamcop_report_address: str, smtpd_address: str, mock_report_address: str,
+                 use_sssd: bool) -> None:
     # DBusGMainLoop(set_as_default=True)
     dbus_loop = DBusGMainLoop()
     asyncio.set_event_loop_policy(asyncio_glib.GLibEventLoopPolicy())
     asyncio_loop = asyncio.get_event_loop()
 
     # Publish the interactive service into D-Bus
+    config = {
+        'Reporter': {
+            'from_address': from_address,
+            'spamcop_report_address': spamcop_report_address,
+            'smtpd_address': smtpd_address,
+            'mock_report_address': mock_report_address
+        }
+    }
     dbus.SpamReporterService(use_system_bus, dbus_loop, config)
 
     # Systemd watchdog?
@@ -217,28 +227,35 @@ def monitor_dbus(use_system_bus: bool, config: dict, use_sssd: bool) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description='Spam Email Reporter daemon')
+    parser = configargparse.ArgumentParser(description='Spam Email Reporter daemon',
+                                           default_config_files=['/etc/spammer-block/reporter.conf',
+                                                                 '~/.spammer-reporter'])
     parser.add_argument('bus_type', metavar='BUS-TYPE-TO-USE', choices=[BUS_SYSTEM, BUS_SESSION],
                         help="D-bus type to use. Choices: {}".format(', '.join([BUS_SYSTEM, BUS_SESSION])))
-    parser.add_argument('--from-address', default=ConfigReader.DEFAULT_FROM_ADDRESS,
+    parser.add_argument('--from-address', default=DEFAULT_FROM_ADDRESS,
                         help="Send mail to Spamcop using given sender address. Default: {}".format(
-                            ConfigReader.DEFAULT_FROM_ADDRESS))
-    parser.add_argument('--smtpd-address', default=ConfigReader.DEFAULT_SMTPD_ADDRESS,
+                            DEFAULT_FROM_ADDRESS))
+    parser.add_argument('--smtpd-address', default=DEFAULT_SMTPD_ADDRESS,
                         help="Send mail using SMTPd at address. Default: {}".format(ConfigReader.DEFAULT_SMTPD_ADDRESS))
     parser.add_argument('--spamcop-report-address', metavar="REPORT-ADDRESS",
                         help="Report to Spamcop using given address")
+    parser.add_argument('--mock-report-address', metavar="REPORT-ADDRESS",
+                        help="Report to given e-mail address. Simulate reporting for test purposes.")
     parser.add_argument('--watchdog-time', type=int,
-                        default=ConfigReader.DEFAULT_SYSTEMD_WATCHDOG_TIME,
+                        default=DEFAULT_SYSTEMD_WATCHDOG_TIME,
                         help="How often systemd watchdog is notified. "
-                             "Default: {} seconds".format(ConfigReader.DEFAULT_SYSTEMD_WATCHDOG_TIME))
+                             "Default: {} seconds".format(DEFAULT_SYSTEMD_WATCHDOG_TIME))
     parser.add_argument('--maildir-base',
                         help="For every user, email is delivered into Maildir. "
                              "Per-user base directory name. Default: none")
-    parser.add_argument('--log-level', default=ConfigReader.DEFAULT_LOG_LEVEL,
-                        help='Set logging level. Python default is: {}'.format(ConfigReader.DEFAULT_LOG_LEVEL))
-    parser.add_argument('--config-file',
-                        metavar="TOML-CONFIGURATION-FILE",
-                        help="Configuration Toml-file")
+    parser.add_argument('--log-level', default=DEFAULT_LOG_LEVEL,
+                        help='Set logging level. Python default is: {}'.format(DEFAULT_LOG_LEVEL))
+    parser.add_argument('--force-root-override', action='store_true',
+                        help='When launching the daemon, check all users even not running as root '
+                             '(may not be allowed).')
+    parser.add_argument("-c", "--config-file",
+                        is_config_file=True,
+                        help="Specify config file", metavar="FILE")
     args = parser.parse_args()
 
     _setup_logger(args.log_level)
@@ -250,41 +267,12 @@ def main() -> None:
     else:
         raise ValueError("Internal: Which bus?")
 
-    # Read configuration?
-    if args.config_file:
-        if not os.path.exists(args.config_file):
-            log.error("Given configuration file '{}' doesn't exist!".format(args.config_file))
-            exit(2)
-        log.debug("Reading configuration from: {}".format(args.config_file))
-        config = ConfigReader.config_from_toml_file(args.config_file)
-    else:
-        config = ConfigReader.empty_config()
-
     # Watchdog
     global wd
     wd = watchdog()
 
-    # Change log-level?
-    if wd.is_enabled or (args.log_level == ConfigReader.DEFAULT_LOG_LEVEL and
-                         config['Daemon']['log_level'] != ConfigReader.DEFAULT_LOG_LEVEL):
-        # --log-level not specified
-        # Toml-configuration has log-level specified. Re-do logging setup.
-        _setup_logger(config['Daemon']['log_level'], watchdog=wd.is_enabled)
-
-    # Merge CLI-arguments
-    if args.from_address != ConfigReader.DEFAULT_FROM_ADDRESS:
-        config['Reporter']['from_address'] = args.from_address
-    if args.spamcop_report_address:
-        config['Reporter']['spamcop_report_address'] = args.spamcop_report_address
-    if args.smtpd_address != ConfigReader.DEFAULT_SMTPD_ADDRESS:
-        config['Reporter']['smtpd_address'] = args.smtpd_address
-    if args.watchdog_time != ConfigReader.DEFAULT_SYSTEMD_WATCHDOG_TIME:
-        config['Daemon']['watchdog_time'] = args.watchdog_time
-    if args.maildir_base:
-        config['Daemon']['maildir_base'] = args.maildir_base
-
     # Mandatory argument(s) specified?
-    if not config['Reporter']['spamcop_report_address'] and not config['Reporter']['mock_report_address']:
+    if not args.spamcop_report_address and not args.mock_report_address:
         log.error("Need --spamcop-report-address or --mock-report-address (or --config)")
         exit(2)
 
@@ -292,7 +280,13 @@ def main() -> None:
     log.info('Starting up ...')
     monitor_dbus(
         using_system_bus,
-        config,
+        args.watchdog_time,
+        args.maildir_base,
+        args.force_root_override,
+        args.from_address,
+        args.spamcop_report_address,
+        args.smtpd_address,
+        args.mock_report_address,
         False
     )
 

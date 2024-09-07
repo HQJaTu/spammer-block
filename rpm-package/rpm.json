@@ -14,7 +14,7 @@
     "name": "spammer-block",
     "summary": "Tool to get CIDRs of a known spammer IP-address by AS-number and report known spam automatically",
     "url": "https://github.com/HQJaTu/spammer-block/",
-    "version": "0.8.4",
+    "version": "0.8.5",
     "release": "1%{?dist}"
   },
   "python_venv": {
@@ -36,6 +36,8 @@
       "2) Automated reporting of spam based on user interaction or block-list"
     ],
     "changelog": [
+      "* Mon Sep 02 2024 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.5-1",
+      "- Using only one type of configuration file.",
       "* Sun Sep 01 2024 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.4-1",
       "- Improved IPinfo.io ASN data retrieval.",
       "* Tue Jul 11 2023 Jari Turkia <jatu@hqcodeshop.fi> - 0.8.3-2",
@@ -90,8 +92,8 @@
         "config": "noreplace"
       },
       {
-        "src": "systemd.service/spammer-reporter.toml",
-        "dest": "etc/sysconfig/spammer-reporter.toml",
+        "src": "systemd.service/reporter.conf",
+        "dest": "etc/spammer-block/reporter.conf",
         "config": "noreplace",
         "attr": "640, -, nobody"
       },

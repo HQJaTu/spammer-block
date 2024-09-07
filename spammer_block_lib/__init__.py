@@ -2,7 +2,6 @@
 
 from .spammer_block import SpammerBlock
 from .output import NetworkOutputNone, NetworkOutputJson, NetworkOutputPostfix
-from .config.reader import ConfigReader
 
 NET_LIST_OUTPUT_OPTIONS = {
     'none': NetworkOutputNone,
@@ -11,5 +10,4 @@ NET_LIST_OUTPUT_OPTIONS = {
 }
 
 __all__ = ['SpammerBlock', 'NetworkOutputNone', 'NetworkOutputJson', 'NetworkOutputPostfix',
-           'NET_LIST_OUTPUT_OPTIONS',
-           'ConfigReader']
+           'NET_LIST_OUTPUT_OPTIONS']
