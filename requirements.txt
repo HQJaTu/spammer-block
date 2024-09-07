@@ -2,7 +2,7 @@ asyncinotify==2.0.2
 certifi==2024.8.30
 charset-normalizer==2.0.12
 dbus-python==1.2.18
-dnspython==2.0.0
+dnspython==2.6.1
 gbulb==0.6.3
 gobject==0.1.0
 idna==3.3
