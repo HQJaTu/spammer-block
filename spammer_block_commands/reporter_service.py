@@ -65,10 +65,7 @@ def _setup_logger(log_level_in: str, watchdog=False) -> None:
     handler.setFormatter(log_formatter)
     handler.propagate = False
 
-    if log_level_in.upper() not in logging._nameToLevel:
-        raise ValueError("Unkown logging level '{}'!".format(log_level_in))
-    log_level = logging._nameToLevel[log_level_in.upper()]
-    # log_level = logging.getLevelName(log_level_in.upper())
+    log_level = logging.getLevelName(log_level_in.upper())
 
     root_logger = logging.getLogger('')
     root_logger.handlers.clear()
