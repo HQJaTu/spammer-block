@@ -116,17 +116,6 @@ class FolderWatcher:
                         # log.debug("Cancelling a pending task:")
                         pending_task.cancel()
 
-                    if False:
-                        # Now the tasks are cancelled we can await the cancellation
-                        # error, knowing they have done no work.
-                        for pending_task in pending:
-                            try:
-                                log.debug("Waiting for a pending task")
-                                await pending_task
-                            except asyncio.CancelledError:
-                                log.warning("psst... it crashed")
-                                pass
-
                     log.debug("Looped all done tasks.")
                 else:
                     # We have a result from the async iterator.
