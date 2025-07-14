@@ -17,7 +17,7 @@ There are two separate packages.
 
 ### Package
 1. Run this in package root directory, see previously run: `ln -s rpm-package/rpm.json .`
-2. `rpmvenv rpm.json`--verbose
+2. `rpmvenv rpm.json --verbose`
 3. Wait for brand new `.rpm` to appear.
 4. Done! `rpm --install` the resulting package.
 
