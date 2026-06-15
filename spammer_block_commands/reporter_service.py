@@ -184,7 +184,8 @@ def monitor_dbus(use_system_bus: bool, watchdog_time: int, maildir_base: str, fo
     # DBusGMainLoop(set_as_default=True)
     dbus_loop = DBusGMainLoop()
     asyncio.set_event_loop_policy(asyncio_glib.GLibEventLoopPolicy())
-    asyncio_loop = asyncio.get_event_loop()
+    asyncio_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(asyncio_loop)
 
     # Publish the interactive service into D-Bus
     config = {
