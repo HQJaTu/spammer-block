@@ -20,7 +20,7 @@ __author__ = 'Jari Turkia'
 __email__ = 'jatu@hqcodeshop.fi'
 __url__ = 'https://blog.hqcodeshop.fi/'
 __git__ = 'https://github.com/HQJaTu/'
-__version__ = '0.8'
+__version__ = '0.9'
 __license__ = 'GPLv2'
 __banner__ = 'cert_check_lib v{} ({})'.format(__version__, __git__)
 

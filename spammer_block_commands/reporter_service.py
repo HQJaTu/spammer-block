@@ -65,10 +65,7 @@ def _setup_logger(log_level_in: str, watchdog=False) -> None:
     handler.setFormatter(log_formatter)
     handler.propagate = False
 
-    if log_level_in.upper() not in logging._nameToLevel:
-        raise ValueError("Unkown logging level '{}'!".format(log_level_in))
-    log_level = logging._nameToLevel[log_level_in.upper()]
-    # log_level = logging.getLevelName(log_level_in.upper())
+    log_level = logging.getLevelName(log_level_in.upper())
 
     root_logger = logging.getLogger('')
     root_logger.handlers.clear()
@@ -187,7 +184,8 @@ def monitor_dbus(use_system_bus: bool, watchdog_time: int, maildir_base: str, fo
     # DBusGMainLoop(set_as_default=True)
     dbus_loop = DBusGMainLoop()
     asyncio.set_event_loop_policy(asyncio_glib.GLibEventLoopPolicy())
-    asyncio_loop = asyncio.get_event_loop()
+    asyncio_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(asyncio_loop)
 
     # Publish the interactive service into D-Bus
     config = {

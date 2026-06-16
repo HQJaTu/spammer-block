@@ -190,3 +190,44 @@ $ spammer-reporter \
   --spamcop-report-address submit.-your-id-here-@spam.spamcop.net \
   --spamcop-report-from-file Mail/cur/-the-mail-file-here-
 ```
+
+# Postfix
+
+Daemon to assist Postfix SMTPd in recognizing incoming sender's ASN.
+
+Result will be written into mail header as `Received-ASN: <asn of sender>`
+
+## Usage
+```text
+usage: postfix_socketmap_service.py [-h] [--unix-socket-path UNIX_SOCKET_PATH]
+                                    [--tcp-socket-host TCP_SOCKET_HOST]
+                                    [--tcp-socket-port TCP_SOCKET_PORT]
+                                    [--watchdog-time WATCHDOG_TIME]
+                                    --asn-database ASN_DATABASE [--log-level LOG_LEVEL]
+                                    [-c FILE]
+
+Postfix-mapper Spam Blocker
+
+options:
+  -h, --help            show this help message and exit
+  --unix-socket-path UNIX_SOCKET_PATH
+                        Use unix-socket for Postfix IPC.
+  --tcp-socket-host TCP_SOCKET_HOST
+                        Use TCP-socket for Postfix IPC, the host.
+  --tcp-socket-port TCP_SOCKET_PORT
+                        Use TCP-socket for Postfix IPC.
+  --watchdog-time WATCHDOG_TIME
+                        How often systemd watchdog is notified. Default: 5 seconds
+  --asn-database ASN_DATABASE
+                        Path to GeoLite2-ASN.mmdb. Default: auto-detect under GeoIP-
+                        ASN/.
+  --log-level LOG_LEVEL
+                        Set logging level. Python default is: WARNING
+  -c, --config-file FILE
+                        Specify config file
+
+Args that start with '--' can also be set in a config file (/etc/spammer-block/postfix-
+socketmap.conf or specified via -c). Config file syntax allows: key=value, flag=true,
+stuff=[a,b,c] (for details, see syntax at https://goo.gl/R74nmi). In general, command-
+line values override config file values which override defaults.
+```
