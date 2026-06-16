@@ -1,22 +1,23 @@
-import os
-import sys
-import signal
 import asyncio
-import socket
-from codecs import StreamWriter
-from functools import partial
-from abc import ABC, abstractmethod
-from queue import Queue
 import enum
 import logging
+import os
+import signal
+import socket
+import sys
+from abc import ABC, abstractmethod
+from codecs import StreamWriter
+from functools import partial
+from queue import Queue
 
-from .streamreader import StreamReader
+from .streamreader import StreamReader, WantRead, ParseError
 
 logger = logging.getLogger(__name__)
 
 
 class SocketmapResponder(ABC):
     """
+    This is an abstract Postfix socketmap reponder handling all the heavy lifting
     See: https://github.com/Snawoot/postfix-mta-sts-resolver/blob/master/postfix_mta_sts_resolver/responder.py
     """
 
@@ -39,7 +40,7 @@ class SocketmapResponder(ABC):
                  shutdown_timeout: int = 1):
 
         """
-
+        Construct a new socketmap responder
         :param loop: asyncio event loop
         :param unix_socket_path: unix socket path to create
         :param socket_mode: If using unix socket, the file mode to set (eg. 0o666)
@@ -53,10 +54,12 @@ class SocketmapResponder(ABC):
             self._unix = True
             self._path = unix_socket_path
             self._sockmode = socket_mode
+            logger.info("Running with Unix-socket: %s", self._path)
         elif tcp_socket:
             self._unix = False
             self._host = tcp_socket[0]
             self._port = tcp_socket[1]
+            logger.info("Running with TCP-socket: %s:%d", self._host, self._port)
         else:
             raise ValueError("No unix-socket path nor TCP-socket parameters specified! Cannot start server.")
         self._reuse_port = reuse_port
@@ -66,6 +69,11 @@ class SocketmapResponder(ABC):
         self._server = None
 
     async def create(self) -> None:
+        """
+        Create a new server
+        :return:
+        """
+
         def _spawn_client_connection_cb(reader: StreamReader, writer: StreamWriter) -> None:
             def done_cb(task, fut) -> None:
                 self._children.discard(task)
@@ -120,6 +128,17 @@ class SocketmapResponder(ABC):
                                    flags=socket.AI_PASSIVE,
                                    options=None,
                                    loop=None):
+        """
+        Helper: Create a custom socket
+        :param host: Hostname
+        :param port: Port, TCP/UDP
+        :param family: IP-family
+        :param type: Socket type
+        :param flags: Socket flags
+        :param options: Socket options
+        :param loop: AIO loop
+        :return: Newly created socket
+        """
         if loop is None:
             raise ValueError("Need event loop!")
 
@@ -137,6 +156,9 @@ class SocketmapResponder(ABC):
         return sock
 
     async def stop(self) -> None:
+        """
+        Stop server
+        """
         self._server.close()
         await self._server.wait_closed()
         while True:
@@ -226,7 +248,13 @@ class SocketmapResponder(ABC):
 
         return task
 
-    async def _client_request_sender(self, queue: Queue, writer: StreamWriter):
+    async def _client_request_sender(self, queue: Queue, writer: StreamWriter) -> None:
+        """
+        Helper: Send a client request
+        :param queue: Queue to write into
+        :param writer: Stream writer
+        """
+
         def cleanup_queue():
             while not queue.empty():
                 task = queue.get_nowait()
@@ -271,15 +299,9 @@ class SocketmapResponder(ABC):
         # Create coroutine which awaits for steady responses and sends them
         sender = asyncio.ensure_future(self._client_request_sender(queue, writer), loop=self._loop)
 
-        class NetstringException(Exception):
-            pass
-
-        class WantRead(NetstringException):
-            pass
-
-        class ParseError(NetstringException):
-            pass
-
+        # WantRead and ParseError are imported from .streamreader so that the
+        # exceptions raised by the netstring fetcher are the same classes caught
+        # here. EndOfStream is local: it signals the client closed the socket.
         class EndOfStream(Exception):
             pass
 

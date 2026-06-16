@@ -55,14 +55,23 @@ def _setup_logger(log_level_in: str, watchdog=False) -> None:
         log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
         handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(log_formatter)
-    handler.propagate = False
 
     log_level = logging.getLevelName(log_level_in.upper())
 
-    root_logger = logging.getLogger('')
+    # Attach the handler to the root logger only. Every logger (including
+    # 'spammer_block_lib' and its children) propagates its records up to the
+    # root, so a single handler here emits each record exactly once. Adding the
+    # same handler to both root and 'spammer_block_lib' would emit library
+    # records twice (once by the child handler, once after propagation to root).
+    root_logger = logging.getLogger()
     root_logger.handlers.clear()
     root_logger.addHandler(handler)
     root_logger.setLevel(log_level)
+
+    # Ensure the library logger has no stray handlers and propagates to root.
+    lib_logger = logging.getLogger('spammer_block_lib')
+    lib_logger.handlers.clear()
+    lib_logger.propagate = True
 
 
 def _systemd_watchdog_keepalive() -> bool:
@@ -84,17 +93,19 @@ def _systemd_mock_watchdog() -> bool:
     return True
 
 
-def run_daemon(watchdog_time: int, unix_socket_path: Optional[str], tcp_socket: Optional[tuple[str, int]]) -> None:
+def run_daemon(watchdog_time: int, unix_socket_path: Optional[str], tcp_socket: Optional[tuple[str, int]],
+               asn_database_path: Optional[str] = None) -> None:
     """
     Main loop
     :param watchdog_time:
     :param unix_socket_path:
     :param tcp_socket:
+    :param asn_database_path: Path to GeoLite2-ASN.mmdb (None = auto-detect)
     :return:
     """
 
-    asyncio.set_event_loop_policy(asyncio_glib.GLibEventLoopPolicy())
-    asyncio_loop = asyncio.new_event_loop()
+    policy = asyncio_glib.GLibEventLoopPolicy()
+    asyncio_loop = policy.new_event_loop()
 
     # Systemd watchdog?
     if wd.is_enabled:
@@ -110,7 +121,8 @@ def run_daemon(watchdog_time: int, unix_socket_path: Optional[str], tcp_socket: 
     # Go loop until forever.
     log.debug("Going for asyncio event loop using GLib main loop. PID: {}".format(os.getpid()))
 
-    responder = postfix.PostfixSocketmapResponder(asyncio_loop, unix_socket_path=unix_socket_path, tcp_socket=tcp_socket)
+    responder = postfix.PostfixSocketmapResponder(asyncio_loop, unix_socket_path=unix_socket_path,
+                                                  tcp_socket=tcp_socket, asn_database_path=asn_database_path)
     cancel_event = responder.cancellation_event_factory()
     responder_task = responder.responder_task_factory(cancel_event)
 
@@ -135,6 +147,9 @@ def main() -> None:
                         default=DEFAULT_SYSTEMD_WATCHDOG_TIME,
                         help="How often systemd watchdog is notified. "
                              "Default: {} seconds".format(DEFAULT_SYSTEMD_WATCHDOG_TIME))
+    parser.add_argument('--asn-database',
+                        required=True,
+                        help="Path to GeoLite2-ASN.mmdb. Default: auto-detect under GeoIP-ASN/.")
     parser.add_argument('--log-level', default=DEFAULT_LOG_LEVEL,
                         help='Set logging level. Python default is: {}'.format(DEFAULT_LOG_LEVEL))
     parser.add_argument("-c", "--config-file",
@@ -156,7 +171,8 @@ def main() -> None:
     log.info('Starting up ...')
     run_daemon(args.watchdog_time,
                args.unix_socket_path,
-               (args.tcp_socket_host, args.tcp_socket_port)
+               (args.tcp_socket_host, args.tcp_socket_port),
+               args.asn_database
                )
 
 
