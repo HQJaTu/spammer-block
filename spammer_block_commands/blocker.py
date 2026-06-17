@@ -19,11 +19,13 @@
 # Copyright (c) Jari Turkia
 
 
-import sys
 import configargparse
 import logging
+import sys
+
 from spammer_block_lib import *
 from spammer_block_lib import datasources
+from spammer_block_lib.config import MergingTomlConfigParser
 
 log = logging.getLogger(__name__)
 
@@ -49,10 +51,16 @@ def _setup_logger(log_level_in: str) -> None:
 
 
 def main():
-    parser = configargparse.ArgumentParser(description='Block IP-ranges of a spammer',
-                                           formatter_class=configargparse.RawTextHelpFormatter,
-                                           default_config_files=['/etc/spammer-block/blocker.conf',
-                                                                 '~/.spammer-blocker'])
+    parser = configargparse.ArgumentParser(
+        description='Block IP-ranges of a spammer',
+        formatter_class=configargparse.RawTextHelpFormatter,
+        default_config_files=['/etc/spammer-block/configuration.toml',
+                              '~/.spammer-blocker'],
+        config_file_parser_class=MergingTomlConfigParser(
+            ['common', 'blocker']
+        ),
+        ignore_unknown_config_file_keys=True,
+    )
     parser.add_argument('ip', metavar="IP",
                         help='IPv4 address to query for')
     parser.add_argument('--asn', '-a',
@@ -82,10 +90,15 @@ def main():
     parser.add_argument('--log-level', default="WARNING",
                         help='Set logging level (CRITICAL, FATAL, ERROR, WARNING, INFO, DEBUG). '
                              'Python default is: WARNING')
+    parser.add_argument('--datasource', default='ipinfo',
+                        choices=['ipinfo', 'ipinfo-ui', 'radb', 'geoip2'],
+                        help='ASN datasource to use. Default: ipinfo')
     parser.add_argument('--ipinfo-token',
                         help='ipinfo.io API access token for using paid ASN query service')
     parser.add_argument('--ipinfo-db-file',
                         help='ipinfo.io ASN DB file')
+    parser.add_argument('--geoip2-asn-db-file',
+                        help='Path to GeoLite2-ASN.mmdb (used with --datasource geoip2)')
     parser.add_argument('--asn-result-json-file',
                         help='To conserve ASN-queries, save query result\n'
                              'or use existing result from a previous query.\n'
@@ -100,8 +113,18 @@ def main():
     _setup_logger(args.log_level)
 
     # Select datasource
-    # ds = datasources.RADb(args.ip)
-    ds = datasources.IPInfoIO(args.ip, token=args.ipinfo_token, db_file=args.ipinfo_db_file)
+    if args.datasource == 'ipinfo':
+        ds = datasources.IPInfoIO(args.ip, token=args.ipinfo_token, db_file=args.ipinfo_db_file)
+    elif args.datasource == 'ipinfo-ui':
+        ds = datasources.IPInfoIO_UI()
+    elif args.datasource == 'radb':
+        ds = datasources.RADb(args.ip)
+    elif args.datasource == 'geoip2':
+        if not args.geoip2_asn_db_file:
+            parser.error("--datasource geoip2 requires --geoip2-asn-db-file")
+        ds = datasources.Geoip2ASN(args.ip, db_file=args.geoip2_asn_db_file)
+    else:
+        parser.error("Unknown datasource: {}".format(args.datasource))
 
     # Go process
     spammer_blocker = SpammerBlock(ds)

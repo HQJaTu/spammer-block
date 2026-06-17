@@ -4,17 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spammer-block"
-version = "0.8.4"
+version = "0.9.1"
 authors = [{name = "Jari Turkia", email = "jatu@hqcodeshop.fi"}]
 license = {text = "GPLv2"}
 description = "Tool to get CIDRs of a known spammer IP-address by AS-number and report known spam automatically"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: System Administrators",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 urls = {Homepage = "https://github.com/HQJaTu/spammer-block"}
 requires-python = ">=3.9, <4"
@@ -32,13 +33,15 @@ dependencies = [
     "pycairo==1.26.1",
     "PyGObject==3.48.2",
     "python-systemd==0.0.9",
-    "requests==2.32.4",
+    "requests==2.33.0",
     "systemd==0.17.1",
     "systemd-watchdog==0.9.0",
     "cysystemd==1.6.2",
     "toml==0.10.2",
     "asyncio-glib==0.1",
     "ConfigArgParse==1.7",
+    "geoip2==5.2.0",
+    "lmdb==2.2.1",
 ]
 
 [tool.setuptools.package-dir]
@@ -49,3 +52,5 @@ spammer_block_commands = "spammer_block_commands"
 spammer-blocker = "spammer_block_commands.blocker:main"
 spammer-reporter = "spammer_block_commands.reporter:main"
 spammer-reporter-service = "spammer_block_commands.reporter_service:main"
+postfix-socketmap-service = "spammer_block_commands.postfix_socketmap_service:main"
+spammer-reputation-db = "spammer_block_commands.reputation_db:main"

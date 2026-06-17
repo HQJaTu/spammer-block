@@ -163,6 +163,15 @@ _Permitted_, _Inheritable_, _Effective_, _Bounding_ and _Ambient_ capability set
 
 See subdirectory `SElinux/` for details.
 
+## Build new RPM-package
+* Prerequisites:
+  * Package rpm-build
+* Build:
+  ```
+  make
+  rpmbuild -ba spammer-block_policy_selinux.spec
+  ```
+
 ## Test run service
 
 * Use SElinux-tool `runcon`. Set _system_u:system_r:spammerblock_t:s0_ as security context.
@@ -175,6 +184,13 @@ runcon system_u:system_r:spammerblock_t:s0 \
   --config /etc/sysconfig/spammer-reporter.toml
 ```
 
+```bash
+runcon system_u:system_r:spammerblock_t:s0 \
+  /usr/libexec/spammer-block/bin/python \
+  spammer_block_commands/postfix_socketmap_service.py \
+  --config /etc/spammer-block/postfix-socketmap.conf
+```
+
 * [runcon(1) - Linux man page](https://linux.die.net/man/1/runcon)
 
 ## Temporarily disable all don't audit -rules
@@ -184,3 +200,8 @@ semodule -DB
 ```
 
 Now all possible deny-rules are logged and can be traced with `audit2allow`.
+
+Enable normal operations with:
+```bash
+semodule -B
+```

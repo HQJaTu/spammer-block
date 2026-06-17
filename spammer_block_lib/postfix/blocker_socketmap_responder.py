@@ -1,11 +1,12 @@
-import geoip2.database
-import geoip2.errors
 import ipaddress
+import lmdb
 import logging
 from pathlib import Path
 from typing import Optional, Union
 
 from . import SocketmapResponder
+from ..datasources import Geoip2ASN
+from ..reputation import ReputationDb, Verdict
 
 logger = logging.getLogger(__name__)
 
@@ -57,19 +58,40 @@ class PostfixSocketmapResponder(SocketmapResponder):
     # 100000 characters" -- socketmap_table(5).
     MAX_REPLY_BYTES: int = 100000
 
-    def __init__(self, *args, asn_database_path: Optional[str] = None, **kwargs) -> None:
+    def __init__(self, *args, asn_database_path: Optional[str] = None,
+                 reputation_db_path: Optional[str] = None, **kwargs) -> None:
         """
         Constructor.
         :param args: Common arguments
         :param asn_database_path: Path to GeoIP ASN database
+        :param reputation_db_path: Path to the LMDB reputation database, or None.
+                                   When None, reputation is skipped and every
+                                   resolvable sender is treated as pass
+                                   (informational OK_HEADER_NAME only).
         :param kwargs: Common keyword arguments
         """
         super().__init__(*args, **kwargs)
         logger.info("Using GeoIP2-ASN database: {}".format(asn_database_path))
 
-        # geoip2.database.Reader is memory-mapped and thread-safe; open it once
-        # for the lifetime of the daemon rather than per request.
-        self._asn_reader = geoip2.database.Reader(asn_database_path)
+        # The responder always resolves IP -> ASN from the local GeoLite2-ASN
+        # database, via the Geoip2ASN datasource. It is memory-mapped, so open it
+        # once for the lifetime of the daemon rather than per request.
+        self._asn_datasource = Geoip2ASN(db_file=asn_database_path)
+
+        # The reputation database is opened read-only: this daemon never writes
+        # it (the spammer-reputation-db CLI is the writer). Each resolve() runs a
+        # short read transaction, so CLI edits are picked up without a restart.
+        self._rep_db: Optional[ReputationDb] = None
+        if reputation_db_path:
+            try:
+                self._rep_db = ReputationDb(reputation_db_path, readonly=True)
+            except lmdb.Error as exc:
+                raise FileNotFoundError(
+                    "Cannot open reputation database {!r} read-only: {}. Create it first "
+                    "with the spammer-reputation-db CLI.".format(reputation_db_path, exc))
+            logger.info("Using reputation database: {}".format(reputation_db_path))
+        else:
+            logger.info("No reputation database configured; treating all senders as pass.")
 
     @staticmethod
     def _netstring_encode(payload: bytes) -> bytes:
@@ -129,35 +151,52 @@ class PostfixSocketmapResponder(SocketmapResponder):
             logger.debug("Key {!r} is not a full IP-address; NOTFOUND".format(key_str))
             return self._reply(SocketmapResponder.ResponseType.NOTFOUND)
 
+        # Go query the ASN for the IP-address
         try:
-            asn_response = self._asn_reader.asn(str(ip))
-        except geoip2.errors.AddressNotFoundError:
-            logger.debug("No ASN for {}; NOTFOUND".format(ip))
-            return self._reply(SocketmapResponder.ResponseType.NOTFOUND)
-        except (ValueError, geoip2.errors.GeoIP2Error) as exc:
+            asn_lookup = self._asn_datasource.asn_for_ip(ip)
+        except Exception as exc:
+            # A single failed lookup must not take the daemon down; let Postfix retry.
             logger.warning("ASN lookup failed for {}: {}".format(ip, exc))
             return self._reply(SocketmapResponder.ResponseType.TEMP, b"ASN lookup failed")
+        if asn_lookup is None:
+            logger.debug("No ASN for {}; NOTFOUND".format(ip))
+            return self._reply(SocketmapResponder.ResponseType.NOTFOUND)
 
-        asn = asn_response.autonomous_system_number
-        org = asn_response.autonomous_system_organization or "unknown"
-        header_value = self._build_header_value(ip, asn, org)
+        asn, org = asn_lookup
+
+        # Resolve the reputation verdict. Only an explicit 'spam' rule (ASN
+        # default or network override) flags the sender; pass and unknown (no
+        # rule) both resolve to pass -- the configured unknown-ASN policy.
+        verdict = Verdict.PASS
+        matched = None
+        if self._rep_db is not None:
+            resolution = self._rep_db.resolve(ip, asn)
+            matched = resolution.matched
+            if resolution.verdict == Verdict.SPAM:
+                verdict = Verdict.SPAM
+
+        header_name = self.SPAM_HEADER_NAME if verdict == Verdict.SPAM else self.OK_HEADER_NAME
+        header_value = self._build_header_value(ip, asn, org, verdict, matched)
 
         # access(5) action that prepends a header to the message.
-        action = b"PREPEND " + self.OK_HEADER_NAME + b": " + header_value
-        logger.info("Client {} -> AS{} ({}); prepending {}".format(
-            ip, asn, org, self.OK_HEADER_NAME.decode("ascii")))
+        action = b"PREPEND " + header_name + b": " + header_value
+        logger.info("Client {} -> AS{} ({}); verdict={} rule={}; prepending {}".format(
+            ip, asn, org, verdict, matched, header_name.decode("ascii")))
 
         return self._reply(SocketmapResponder.ResponseType.OK, action)
 
     @staticmethod
     def _build_header_value(ip: Union[ipaddress.IPv4Address, ipaddress.IPv6Address],
-                            asn: int, org: str) -> bytes:
+                            asn: int, org: str, verdict: str,
+                            matched: Optional[str]) -> bytes:
         """
         Build a single, sanitized header value. access(5) PREPEND cannot prepend
         a multiline header, so collapse whitespace and strip CR/LF.
         """
         org_clean = " ".join(str(org).split())
-        value = "AS{} {} (client {})".format(asn, org_clean, ip)
+        value = "AS{} {}; client={}; verdict={}".format(asn, org_clean, ip, verdict)
+        if matched:
+            value += "; rule={}".format(matched)
         value = value.replace("\r", " ").replace("\n", " ")
 
         return value.encode("ascii", errors="replace")

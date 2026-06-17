@@ -1,0 +1,44 @@
+[Unit]
+Description=Postfix socketmap service for incoming mail client checking
+
+[Service]
+Environment="CONFIG=/etc/spammer-block/postfix-socketmap.conf"
+ExecStart=/usr/libexec/spammer-block/bin/python /usr/libexec/spammer-block/bin/postfix-socketmap-service --config $CONFIG
+User=postfix
+Type=notify
+NotifyAccess=main
+WatchdogSec=20s
+Restart=on-failure
+StandardOutput=journal
+StandardError=journal
+
+# From low-memory-monitor.service:
+CPUSchedulingPolicy=fifo
+CPUSchedulingPriority=1
+
+# Filesystem lockdown
+ProtectSystem=strict
+PrivateDevices=true
+ProtectControlGroups=true
+ProtectHome=true
+PrivateTmp=true
+
+# Network
+# NOTE: Need system services, like SMTPd in TCP/25
+PrivateNetwork=true
+RestrictAddressFamilies=AF_UNIX AF_LOCAL AF_NETLINK AF_INET AF_INET6
+
+# Execute Mappings
+MemoryDenyWriteExecute=true
+
+# Modules
+ProtectKernelModules=true
+
+# Real-time
+RestrictRealtime=true
+
+# Privilege escalation
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

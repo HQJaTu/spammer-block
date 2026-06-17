@@ -18,10 +18,11 @@
 #
 # Copyright (c) Jari Turkia
 
-import os
-import sys
 import configargparse
 import logging
+import os
+import sys
+
 from spammer_block_lib import ConfigReader, reporter as spam_reporters
 
 log = logging.getLogger(__name__)
@@ -79,9 +80,14 @@ def dbus_reporter(use_system_bus: bool, filename: str) -> None:
 
 
 def main():
-    parser = configargparse.ArgumentParser(description='Report received email as spam',
-                                           default_config_files=['/etc/spammer-block/reporter.conf',
-                                                                 '~/.spammer-reporter'])
+    parser = configargparse.ArgumentParser(
+        description='Report received email as spam',
+        default_config_files=['/etc/spammer-block/configuration.toml',
+                              '~/.spammer-reporter'],
+        config_file_parser_class=configargparse.TomlConfigParser(
+            ['common', 'reporter']
+        ),
+    )
     parser.add_argument('--from-address', default=DEFAULT_FROM_ADDRESS,
                         help="Send mail to Spamcop using given sender address. Default: {}".format(
                             DEFAULT_FROM_ADDRESS))

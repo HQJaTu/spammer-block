@@ -8,7 +8,7 @@ restorecon -R /usr/libexec/spammer-block/lib; \
 %define selinux_policyver 0.0.0
 
 Name:   spammer-block_policy_selinux
-Version:	1.1
+Version:	1.2
 Release:	1%{?dist}
 Summary:	SELinux policy module for spammer-block_policy
 
@@ -66,7 +66,9 @@ exit 0
 
 
 %changelog
-* Sat Jun 17 2023 Jari Turkia <jatu@hqcodeshop.fi> 1.1-1
+* Wed Jun 17 2026 Jari Turkia <jatu@hqcodeshop.fi> - 1.2-1
+- Added Postfix socketmap into policy
+* Sat Jun 17 2023 Jari Turkia <jatu@hqcodeshop.fi> - 1.1-1
 - Compensated policy for Fedora 38 SElinux improvements
-* Mon Oct  3 2022 Jari Turkia <jatu@hqcodeshop.fi> 1.0-1
+* Mon Oct  3 2022 Jari Turkia <jatu@hqcodeshop.fi> - 1.0-1
 - Initial version

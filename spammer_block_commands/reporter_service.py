@@ -19,20 +19,21 @@
 #
 # Copyright (c) Jari Turkia
 
-import os
-import pwd
-import sys
-from systemd_watchdog import watchdog
-from typing import Optional, Tuple
-import configargparse
-from dbus.mainloop.glib import DBusGMainLoop
-from gi.repository import GLib
 import asyncio
 import asyncio_glib
-import re
+import configargparse
 import logging
-from cysystemd.journal import JournaldLogHandler
+import os
+import pwd
+import re
+from dbus.mainloop.glib import DBusGMainLoop
+from gi.repository import GLib
+from systemd_watchdog import watchdog
+from typing import Optional, Tuple
+
 from spammer_block_lib import dbus
+from spammer_block_lib.config import MergingTomlConfigParser
+from spammer_block_lib.daemon_log import setup_logger
 
 log = logging.getLogger(__name__)
 wd: watchdog = None
@@ -45,32 +46,6 @@ DEFAULT_FROM_ADDRESS = "joe.user@example.com"
 DEFAULT_SMTPD_ADDRESS = "127.0.0.1"
 DEFAULT_SYSTEMD_WATCHDOG_TIME = 5
 DEFAULT_LOG_LEVEL = "WARNING"
-
-
-def _setup_logger(log_level_in: str, watchdog=False) -> None:
-    """
-    Logging setup
-    :param log_level_in:
-    :param watchdog:
-    :return:
-    """
-    if watchdog:
-        # Running as daemon, Systemd will handle timestamping for us.
-        # Also: daemons may have trouble with stdout / stderr, using journald instead.
-        handler = JournaldLogHandler()
-        log_formatter = logging.Formatter("[%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
-    else:
-        log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
-        handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(log_formatter)
-    handler.propagate = False
-
-    log_level = logging.getLevelName(log_level_in.upper())
-
-    root_logger = logging.getLogger('')
-    root_logger.handlers.clear()
-    root_logger.addHandler(handler)
-    root_logger.setLevel(log_level)
 
 
 def gather_mailboxes_to_watch(maildir_base: str, force_root_override: bool, use_sssd: bool) -> list:
@@ -225,9 +200,15 @@ def monitor_dbus(use_system_bus: bool, watchdog_time: int, maildir_base: str, fo
 
 
 def main() -> None:
-    parser = configargparse.ArgumentParser(description='Spam Email Reporter daemon',
-                                           default_config_files=['/etc/spammer-block/reporter.conf',
-                                                                 '~/.spammer-reporter'])
+    parser = configargparse.ArgumentParser(
+        description='Spam Email Reporter daemon',
+        default_config_files=['/etc/spammer-block/configuration.toml',
+                              '~/.spammer-reporter'],
+        config_file_parser_class=MergingTomlConfigParser(
+            ['common', 'reporter.service']
+        ),
+        ignore_unknown_config_file_keys=True,
+    )
     parser.add_argument('bus_type', metavar='BUS-TYPE-TO-USE', choices=[BUS_SYSTEM, BUS_SESSION],
                         help="D-bus type to use. Choices: {}".format(', '.join([BUS_SYSTEM, BUS_SESSION])))
     parser.add_argument('--from-address', default=DEFAULT_FROM_ADDRESS,
@@ -256,7 +237,13 @@ def main() -> None:
                         help="Specify config file", metavar="FILE")
     args = parser.parse_args()
 
-    _setup_logger(args.log_level)
+    # Determine systemd/watchdog availability BEFORE configuring logging, so the
+    # first log line already has the right format: under systemd journald
+    # timestamps for us (no in-message timestamp), run manually we add one.
+    # watchdog() only reads the environment and sends nothing, so this is safe.
+    global wd
+    wd = watchdog()
+    setup_logger(args.log_level, watchdog=wd.is_enabled)
 
     if args.bus_type == BUS_SYSTEM:
         using_system_bus = True
@@ -264,10 +251,6 @@ def main() -> None:
         using_system_bus = False
     else:
         raise ValueError("Internal: Which bus?")
-
-    # Watchdog
-    global wd
-    wd = watchdog()
 
     # Mandatory argument(s) specified?
     if not args.spamcop_report_address and not args.mock_report_address:

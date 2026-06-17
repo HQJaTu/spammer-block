@@ -38,6 +38,8 @@ require {
     type systemd_userdbd_t;
     type systemd_userdbd_runtime_t;
     type cert_t;
+    type postfix_private_t;
+    type postfix_smtpd_t;
 
     # Noise:
     type abrt_etc_t;
@@ -108,7 +110,7 @@ allow spammerblock_t self:tcp_socket { bind connect create read write };
 allow spammerblock_t proc_t:file { read open };
 allow spammerblock_t sysfs_t:file { read open };
 allow spammerblock_t var_run_t:dir { open read write };
-allow spammerblock_t cert_t:dir { search };
+allow spammerblock_t cert_t:dir { search getattr open read };
 allow spammerblock_t cert_t:file { open read getattr };
 allow spammerblock_t hugetlbfs_t:dir { open read write };
 
@@ -171,6 +173,11 @@ allow spammerblock_t tmp_t:dir { add_name remove_name write };
 allow spammerblock_t tmpfs_t:dir { write };
 allow spammerblock_t tmpfs_t:file { open read write map execute };
 
+# Socketmap
+allow spammerblock_t postfix_private_t:dir { add_name search write remove_name };
+allow spammerblock_t postfix_private_t:sock_file { create getattr setattr unlink };
+allow spammerblock_t postfix_spool_t:dir { getattr search };
+allow postfix_smtpd_t spammerblock_t:unix_stream_socket connectto;
 
 # Noise:
 # Python is very touchy-feely and loves accessing lots of unrelated files and directories.
@@ -198,7 +205,6 @@ dontaudit spammerblock_t mail_spool_t:dir { getattr search };
 dontaudit spammerblock_t named_cache_t:dir { getattr search };
 dontaudit spammerblock_t named_conf_t:dir { getattr search };
 dontaudit spammerblock_t named_zone_t:dir { getattr search };
-dontaudit spammerblock_t postfix_spool_t:dir { getattr search };
 dontaudit spammerblock_t postgresql_db_t:dir { getattr search };
 dontaudit spammerblock_t print_spool_t:dir { getattr search };
 dontaudit spammerblock_t public_content_t:dir { getattr search };

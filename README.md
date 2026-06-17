@@ -192,19 +192,46 @@ $ spammer-reporter \
 ```
 
 # Postfix
-
 Daemon to assist Postfix SMTPd in recognizing incoming sender's ASN.
 
 Result will be written into mail header as `Received-ASN: <asn of sender>`
 
-## Usage
+## Postfix configuration
+Configuration file `main.cf`, into section `smtpd_client_restrictions` add `check_client_access`.
+Parameter is a following sequence:
+1. Constant `socketmap`
+2. For unix-sockets, constant `unix`. For TCP-sockets ?
+3. The path to existing unix-socket created by the running daemon.
+4. Mapname. Choose a word of your liking.
+
+Example:
+```text
+smtpd_client_restrictions =
+    check_client_access socketmap:unix:/var/spool/postfix/private/asn_map:asn
+    permit
+```
+
+### Configuration considerations
+1. Postfix may run chrooted. See `master.cf` if chroot is _Y_ or _N_.
+   - Alter your socket path if necessary.
+2. Systemd will eat any `/tmp/` if using private tmp -configuration.
+   - Avoid using `tmp/` in your socket path just to be sure.
+3. Permissions are picky
+   - Postfix process is running as UID _postfix_, GID _postfix_. Make sure socket can be written to.
+4. SElinux is especially picky. Postfix process context is _postfix_smtpd_t_ and it
+   can not write into any file/socket context.
+   - Choose _postfix_private_t_ which is ok.
+
+## Postfix socketmap service usage
 ```text
 usage: postfix_socketmap_service.py [-h] [--unix-socket-path UNIX_SOCKET_PATH]
                                     [--tcp-socket-host TCP_SOCKET_HOST]
                                     [--tcp-socket-port TCP_SOCKET_PORT]
                                     [--watchdog-time WATCHDOG_TIME]
-                                    --asn-database ASN_DATABASE [--log-level LOG_LEVEL]
-                                    [-c FILE]
+                                    --asn-database ASN_DATABASE
+                                    [--socket-owner SOCKET_OWNER]
+                                    [--socket-group SOCKET_GROUP]
+                                    [--log-level LOG_LEVEL] [-c FILE]
 
 Postfix-mapper Spam Blocker
 
@@ -221,6 +248,13 @@ options:
   --asn-database ASN_DATABASE
                         Path to GeoLite2-ASN.mmdb. Default: auto-detect under GeoIP-
                         ASN/.
+  --socket-owner SOCKET_OWNER
+                        Owner (user name or uid) to set on the unix-socket file. Only
+                        applied when running as root.
+  --socket-group SOCKET_GROUP
+                        Group (group name or gid) to set on the unix-socket file. As
+                        root this sets the GID; as non-root it chgrp's the socket
+                        (group-write is granted first).
   --log-level LOG_LEVEL
                         Set logging level. Python default is: WARNING
   -c, --config-file FILE
@@ -230,4 +264,34 @@ Args that start with '--' can also be set in a config file (/etc/spammer-block/p
 socketmap.conf or specified via -c). Config file syntax allows: key=value, flag=true,
 stuff=[a,b,c] (for details, see syntax at https://goo.gl/R74nmi). In general, command-
 line values override config file values which override defaults.
+```
+
+## ASnumber reputation database
+```text
+usage: reputation_db.py [-h] -d DATABASE [--log-level LOG_LEVEL]
+                        {list,set-asn,del-asn,add-net,del-net,lookup} ...
+
+View and edit the ASN reputation database.
+
+positional arguments:
+  {list,set-asn,del-asn,add-net,del-net,lookup}
+    list                List database contents.
+    set-asn             Add or alter an ASN default verdict.
+    del-asn             Delete an ASN default verdict.
+    add-net             Add or alter a network/host override.
+    del-net             Delete a network/host override.
+    lookup              Resolve an IP the way the responder would.
+
+options:
+  -h, --help            show this help message and exit
+  -d, --database DATABASE
+                        Path to the LMDB reputation database (env:
+                        SPAMMER_REPUTATION_DB). [env var: SPAMMER_REPUTATION_DB]
+  --log-level LOG_LEVEL
+                        Logging level. Default: WARNING
+
+Args that start with '--' can also be set in a config file (/etc/spammer-
+block/reputation.conf). Config file syntax allows: key=value, flag=true, stuff=[a,b,c]
+(for details, see syntax at https://goo.gl/R74nmi). In general, command-line values
+override environment variables which override config file values which override
 ```

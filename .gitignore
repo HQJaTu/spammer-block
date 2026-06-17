@@ -1,3 +1,6 @@
+# IntelliJ
+.idea/
+
 # SElinux
 systemd.service/SElinux/tmp/
 systemd.service/SElinux/*.pp
