@@ -23,7 +23,8 @@ import logging
 import os
 import sys
 
-from spammer_block_lib import ConfigReader, reporter as spam_reporters
+from spammer_block_lib.config import MergingTomlConfigParser
+from spammer_block_lib import reporter as spam_reporters
 
 log = logging.getLogger(__name__)
 
@@ -84,7 +85,7 @@ def main():
         description='Report received email as spam',
         default_config_files=['/etc/spammer-block/configuration.toml',
                               '~/.spammer-reporter'],
-        config_file_parser_class=configargparse.TomlConfigParser(
+        config_file_parser_class=MergingTomlConfigParser(
             ['common', 'reporter']
         ),
     )

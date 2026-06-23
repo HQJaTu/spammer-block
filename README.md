@@ -40,13 +40,14 @@ Limit: A non-paid API of ipinfo.ip will serve 5 ASN-queries / day / IP-address.
 ## Usage
 * Spammer block:
 ```text
-usage: spammer-blocker [-h] [--asn ASN] [--skip-overlapping]
-                       [--allow-non-exact-overlapping] [--output-format OUTPUT_FORMAT]
-                       [--output-file OUTPUT_FILE] [--postfix-rule POSTFIX_RULE]
-                       [--log-level LOG_LEVEL] [--ipinfo-token IPINFO_TOKEN]
-                       [--ipinfo-db-file IPINFO_DB_FILE]
-                       [--asn-result-json-file ASN_RESULT_JSON_FILE] [-c FILE]
-                       IP
+usage: blocker.py [-h] [--asn ASN] [--skip-overlapping] [--allow-non-exact-overlapping]
+                  [--output-format OUTPUT_FORMAT] [--output-file OUTPUT_FILE]
+                  [--postfix-rule POSTFIX_RULE] [--log-level LOG_LEVEL]
+                  [--datasource {ipinfo,ipinfo-ui,radb,geoip2}]
+                  [--ipinfo-token IPINFO_TOKEN] [--ipinfo-db-file IPINFO_DB_FILE]
+                  [--geoip2-asn-db-file GEOIP2_ASN_DB_FILE]
+                  [--asn-result-json-file ASN_RESULT_JSON_FILE] [-c FILE]
+                  IP
 
 Block IP-ranges of a spammer
 
@@ -55,12 +56,12 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  --asn ASN, -a ASN     Skip querying for ASN
+  --asn, -a ASN         Skip querying for ASN
   --skip-overlapping, --merge-overlapping
                         Don't display any overlapping subnets. Larger network will be merged to hide smaller ones. Default: yes
   --allow-non-exact-overlapping
                         When merging overlapping, reduce number of networks by allowing non-exact merge. Default: no
-  --output-format OUTPUT_FORMAT, -o OUTPUT_FORMAT
+  --output-format, -o OUTPUT_FORMAT
                         Output format. Choices: none, json, postfix
                         Default: "postfix" will produce Postfix CIDR-table
   --output-file OUTPUT_FILE
@@ -72,22 +73,26 @@ options:
                         Example: "PREPEND X-Spam-ASN: AS{ASN}"
   --log-level LOG_LEVEL
                         Set logging level (CRITICAL, FATAL, ERROR, WARNING, INFO, DEBUG). Python default is: WARNING
+  --datasource {ipinfo,ipinfo-ui,radb,geoip2}
+                        ASN datasource to use. Default: ipinfo
   --ipinfo-token IPINFO_TOKEN
                         ipinfo.io API access token for using paid ASN query service
   --ipinfo-db-file IPINFO_DB_FILE
                         ipinfo.io ASN DB file
+  --geoip2-asn-db-file GEOIP2_ASN_DB_FILE
+                        Path to GeoLite2-ASN.mmdb (used with --datasource geoip2)
   --asn-result-json-file ASN_RESULT_JSON_FILE
                         To conserve ASN-queries, save query result
                         or use existing result from a previous query.
                         Dynamic AS-number assignment with "{ASN}".
-  -c FILE, --config-file FILE
+  -c, --config-file FILE
                         Specify config file
 
 Args that start with '--' can also be set in a config file (/etc/spammer-
-block/blocker.conf or ~/.spammer-blocker or specified via -c). Config file syntax
-allows: key=value, flag=true, stuff=[a,b,c] (for details, see syntax at
-https://goo.gl/R74nmi). In general, command-line values override config file values
-which override defaults.
+block/configuration.toml or ~/.spammer-blocker or specified via -c). Config file syntax
+is Tom's Obvious, Minimal Language. See https://github.com/toml-
+lang/toml/blob/v0.5.0/README.md for details. In general, command-line values override
+config file values which override defaults.
 ```
 
 ## Postfix configuration
@@ -150,12 +155,11 @@ fighting against spam. An example of one would be [SpamCop](https://www.spamcop.
 
 ## Usage
 ```text
-usage: spammer-reporter [-h] [--from-address FROM_ADDRESS]
-                        [--smtpd-address SMTPD_ADDRESS]
-                        [--spamcop-report-address REPORT-ADDRESS]
-                        [--mock-report-address REPORT-ADDRESS] [--report-from-stdin]
-                        [--report-from-file FILENAME] [--dbus BUS-TYPE-TO-USE]
-                        [--log-level LOG_LEVEL] [--config-file TOML-CONFIGURATION-FILE]
+usage: reporter.py [-h] [--from-address FROM_ADDRESS] [--smtpd-address SMTPD_ADDRESS]
+                   [--spamcop-report-address REPORT-ADDRESS]
+                   [--mock-report-address REPORT-ADDRESS] [--report-from-stdin]
+                   [--report-from-file FILENAME] [--dbus BUS-TYPE-TO-USE]
+                   [--log-level LOG_LEVEL] [-c FILE]
 
 Report received email as spam
 
@@ -179,8 +183,14 @@ options:
                         --report-from-file. Choices: system, session
   --log-level LOG_LEVEL
                         Set logging level. Python default is: WARNING
-  --config-file TOML-CONFIGURATION-FILE
-                        Configuration Toml-file
+  -c, --config-file FILE
+                        Specify config file
+
+Args that start with '--' can also be set in a config file (/etc/spammer-
+block/configuration.toml or ~/.spammer-reporter or specified via -c). Config file syntax
+is Tom's Obvious, Minimal Language. See https://github.com/toml-
+lang/toml/blob/v0.5.0/README.md for details. In general, command-line values override
+config file values which override defaults.
 ```
 
 ## Example: Manual reporting from Maildir
@@ -229,6 +239,7 @@ usage: postfix_socketmap_service.py [-h] [--unix-socket-path UNIX_SOCKET_PATH]
                                     [--tcp-socket-port TCP_SOCKET_PORT]
                                     [--watchdog-time WATCHDOG_TIME]
                                     --asn-database ASN_DATABASE
+                                    [--reputation-db REPUTATION_DB]
                                     [--socket-owner SOCKET_OWNER]
                                     [--socket-group SOCKET_GROUP]
                                     [--log-level LOG_LEVEL] [-c FILE]
@@ -248,6 +259,10 @@ options:
   --asn-database ASN_DATABASE
                         Path to GeoLite2-ASN.mmdb. Default: auto-detect under GeoIP-
                         ASN/.
+  --reputation-db REPUTATION_DB
+                        Path to the LMDB reputation database (managed by spammer-
+                        reputation-db). If omitted, all resolvable senders are treated
+                        as pass.
   --socket-owner SOCKET_OWNER
                         Owner (user name or uid) to set on the unix-socket file. Only
                         applied when running as root.
@@ -260,18 +275,20 @@ options:
   -c, --config-file FILE
                         Specify config file
 
-Args that start with '--' can also be set in a config file (/etc/spammer-block/postfix-
-socketmap.conf or specified via -c). Config file syntax allows: key=value, flag=true,
-stuff=[a,b,c] (for details, see syntax at https://goo.gl/R74nmi). In general, command-
-line values override config file values which override defaults.
+Args that start with '--' can also be set in a config file (/etc/spammer-
+block/configuration.toml or specified via -c). Config file syntax is Tom's Obvious,
+Minimal Language. See https://github.com/toml-lang/toml/blob/v0.5.0/README.md for
+details. In general, command-line values override config file values which override
+defaults.
 ```
 
 ## ASnumber reputation database
 ```text
-usage: reputation_db.py [-h] -d DATABASE [--log-level LOG_LEVEL]
+usage: reputation_db.py [-h] --reputation-db REPUTATION_DB [--asn-database ASN_DATABASE]
+                        [--log-level LOG_LEVEL]
                         {list,set-asn,del-asn,add-net,del-net,lookup} ...
 
-View and edit the ASN reputation database.
+View and edit the ASN reputation database
 
 positional arguments:
   {list,set-asn,del-asn,add-net,del-net,lookup}
@@ -284,14 +301,20 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  -d, --database DATABASE
+  --reputation-db REPUTATION_DB
                         Path to the LMDB reputation database (env:
                         SPAMMER_REPUTATION_DB). [env var: SPAMMER_REPUTATION_DB]
+  --asn-database ASN_DATABASE
+                        Path to GeoLite2-ASN.mmdb (env: SPAMMER_ASN_DATABASE). When set,
+                        'lookup' resolves the IP's ASN automatically (like the
+                        responder) if --asn is not given. [env var:
+                        SPAMMER_ASN_DATABASE]
   --log-level LOG_LEVEL
                         Logging level. Default: WARNING
 
 Args that start with '--' can also be set in a config file (/etc/spammer-
-block/reputation.conf). Config file syntax allows: key=value, flag=true, stuff=[a,b,c]
-(for details, see syntax at https://goo.gl/R74nmi). In general, command-line values
-override environment variables which override config file values which override
+block/configuration.toml). Config file syntax is Tom's Obvious, Minimal Language. See
+https://github.com/toml-lang/toml/blob/v0.5.0/README.md for details. In general,
+command-line values override environment variables which override config file values
+which override defaults.
 ```

@@ -25,6 +25,7 @@ responder. Both set-asn and add-net are upserts: re-running them on an existing
 key alters that entry.
 """
 
+import os
 import configargparse
 import logging
 import sys
@@ -219,7 +220,7 @@ def main() -> None:
         ),
         ignore_unknown_config_file_keys=True,
     )
-    parser.add_argument('--database',
+    parser.add_argument('--reputation-db', required=True,
                         env_var='SPAMMER_REPUTATION_DB',
                         help="Path to the LMDB reputation database (env: SPAMMER_REPUTATION_DB).")
     parser.add_argument('--asn-database',
@@ -298,7 +299,16 @@ def main() -> None:
     args = parser.parse_args()
     _setup_logger(args.log_level)
 
-    with ReputationDb(args.database) as db:
+    if not args.reputation_db:
+        raise ValueError("--reputation-db missing! Cannot continue.")
+    if not os.path.exists(args.reputation_db):
+        log.warning("Given --reputation-db '%s' does not exist.", args.reputation_db)
+    else:
+        if not os.path.isdir(args.reputation_db):
+            raise ValueError("Given --reputation-db '%s' is not a directory." % args.reputation_db)
+        log.info("Using reputation database directory '%s'", args.reputation_db)
+
+    with ReputationDb(args.reputation_db) as db:
         sys.exit(args.func(db, args))
 
 

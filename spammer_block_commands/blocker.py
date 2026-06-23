@@ -61,6 +61,9 @@ def main():
         ),
         ignore_unknown_config_file_keys=True,
     )
+
+    DEFAULT_DATASOURCE = 'ipinfo'
+
     parser.add_argument('ip', metavar="IP",
                         help='IPv4 address to query for')
     parser.add_argument('--asn', '-a',
@@ -90,9 +93,9 @@ def main():
     parser.add_argument('--log-level', default="WARNING",
                         help='Set logging level (CRITICAL, FATAL, ERROR, WARNING, INFO, DEBUG). '
                              'Python default is: WARNING')
-    parser.add_argument('--datasource', default='ipinfo',
+    parser.add_argument('--datasource', default=DEFAULT_DATASOURCE,
                         choices=['ipinfo', 'ipinfo-ui', 'radb', 'geoip2'],
-                        help='ASN datasource to use. Default: ipinfo')
+                        help=f'ASN datasource to use. Default: {DEFAULT_DATASOURCE}')
     parser.add_argument('--ipinfo-token',
                         help='ipinfo.io API access token for using paid ASN query service')
     parser.add_argument('--ipinfo-db-file',
